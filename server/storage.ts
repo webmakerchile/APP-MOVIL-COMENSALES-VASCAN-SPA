@@ -34,6 +34,7 @@ export interface IStorage {
     minutaId: string,
   ): Promise<Pedido | undefined>;
   createPedido(pedido: InsertPedido & { codigoQr?: string }): Promise<Pedido>;
+  getPedidosByMinuta(minutaId: string): Promise<Pedido[]>;
   getPeriodosByCasino(casinoId: string): Promise<Periodo[]>;
   createPeriodo(periodo: InsertPeriodo): Promise<Periodo>;
 }
@@ -122,6 +123,10 @@ export class DatabaseStorage implements IStorage {
       .values(insertPedido)
       .returning();
     return pedido;
+  }
+
+  async getPedidosByMinuta(minutaId: string): Promise<Pedido[]> {
+    return db.select().from(pedidos).where(eq(pedidos.minutaId, minutaId));
   }
 
   async getPeriodosByCasino(casinoId: string): Promise<Periodo[]> {

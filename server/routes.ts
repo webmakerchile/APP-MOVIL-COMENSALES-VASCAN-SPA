@@ -3,11 +3,16 @@ import { createServer, type Server } from "node:http";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
+import multer from "multer";
+import * as XLSX from "xlsx";
+import * as path from "path";
+import * as fs from "fs";
 import { storage } from "./storage";
 import { pool } from "./db";
 import { loginSchema, insertUserSchema, insertMinutaSchema, insertPedidoSchema, insertCasinoSchema } from "@shared/schema";
 
 const PgSession = connectPgSimple(session);
+const upload = multer({ dest: "/tmp/uploads/" });
 
 export async function registerRoutes(app: Express): Promise<Server> {
   app.use(
@@ -29,6 +34,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }),
   );
 
+  // ── Admin Panel ──
+  app.get("/admin", (_req: Request, res: Response) => {
+    const filePath = path.resolve(process.cwd(), "web", "src", "admin.html");
+    res.sendFile(filePath);
+  });
+
+  // ── Auth Routes ──
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const parsed = loginSchema.safeParse(req.body);
@@ -112,6 +124,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Casinos ──
   app.get("/api/casinos", async (_req: Request, res: Response) => {
     try {
       const casinosList = await storage.getCasinos();
@@ -136,6 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Minutas ──
   app.get("/api/minutas/:casinoId", async (req: Request, res: Response) => {
     try {
       const { casinoId } = req.params;
@@ -161,6 +175,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Pedidos (with Interlocutor logic) ──
   app.get("/api/pedidos/:userId", async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
@@ -179,17 +194,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Datos inválidos" });
       }
 
-      const existing = await storage.getPedidoByUserAndMinuta(
-        parsed.data.userId,
-        parsed.data.minutaId,
-      );
-      if (existing) {
-        return res.status(409).json({ message: "Ya existe un pedido para esta minuta" });
+      const user = await storage.getUser(parsed.data.userId);
+      if (!user) {
+        return res.status(404).json({ message: "Usuario no encontrado" });
+      }
+
+      const minuta = await storage.getMinuta(parsed.data.minutaId);
+      if (!minuta) {
+        return res.status(404).json({ message: "Minuta no encontrada" });
+      }
+
+      if (user.role === "comensal") {
+        const existing = await storage.getPedidoByUserAndMinuta(
+          parsed.data.userId,
+          parsed.data.minutaId,
+        );
+        if (existing) {
+          return res.status(409).json({ message: "Ya tienes un pedido registrado para esta fecha. Solo puedes emitir 1 vale por comida." });
+        }
+      }
+
+      let opcionFinal = parsed.data.opcionSeleccionada;
+      if (user.role === "interlocutor") {
+        opcionFinal = 1;
       }
 
       const codigoQr = `VASCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const pedido = await storage.createPedido({
-        ...parsed.data,
+        userId: parsed.data.userId,
+        minutaId: parsed.data.minutaId,
+        opcionSeleccionada: opcionFinal,
         codigoQr,
       });
 
@@ -200,6 +234,141 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Consolidación / Reportes ──
+  app.get("/api/reportes/consolidacion", async (req: Request, res: Response) => {
+    try {
+      const { casinoId, fecha } = req.query;
+      if (!casinoId || !fecha) {
+        return res.status(400).json({ message: "casinoId y fecha son requeridos" });
+      }
+
+      const casino = await storage.getCasino(casinoId as string);
+      if (!casino) {
+        return res.status(404).json({ message: "Casino no encontrado" });
+      }
+
+      const minutasList = await storage.getMinutasByCasino(casinoId as string);
+      const minuta = minutasList.find((m) => m.fecha === fecha);
+
+      if (!minuta) {
+        return res.json({
+          casinoNombre: casino.nombre,
+          fecha,
+          minuta: null,
+          opciones: [],
+          totalPedidos: 0,
+        });
+      }
+
+      const pedidosForMinuta = await storage.getPedidosByMinuta(minuta.id);
+      const totalPedidos = pedidosForMinuta.length;
+
+      const opciones = [];
+      const optionTexts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4].filter(Boolean);
+
+      for (let i = 0; i < optionTexts.length; i++) {
+        const num = i + 1;
+        const count = pedidosForMinuta.filter((p) => p.opcionSeleccionada === num).length;
+        opciones.push({
+          numero: num,
+          descripcion: optionTexts[i],
+          cantidad: count,
+          porcentaje: totalPedidos > 0 ? Math.round((count / totalPedidos) * 100) : 0,
+        });
+      }
+
+      return res.json({
+        casinoNombre: casino.nombre,
+        fecha,
+        minuta: {
+          id: minuta.id,
+          opcion1: minuta.opcion1,
+          opcion2: minuta.opcion2,
+          opcion3: minuta.opcion3,
+          opcion4: minuta.opcion4,
+        },
+        opciones,
+        totalPedidos,
+      });
+    } catch (error) {
+      console.error("Consolidacion error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  // ── Carga Masiva de Usuarios ──
+  app.post("/api/usuarios/upload", upload.single("file"), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No se recibió archivo" });
+      }
+
+      const workbook = XLSX.readFile(req.file.path);
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet);
+
+      let created = 0;
+      let skipped = 0;
+      let errors = 0;
+      const errorDetails: { row: number; error: string }[] = [];
+
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 2;
+
+        try {
+          const rut = String(row["RUT"] || row["rut"] || "").trim();
+          const nombre = String(row["Nombre"] || row["nombre"] || "").trim();
+          const apellido = String(row["Apellido"] || row["apellido"] || "").trim();
+          const rolRaw = String(row["Rol"] || row["rol"] || "comensal").trim().toLowerCase();
+          const casinoId = String(row["Casino_ID"] || row["casino_id"] || row["CasinoID"] || "").trim();
+
+          if (!rut || !nombre) {
+            errorDetails.push({ row: rowNum, error: "RUT o Nombre vacío" });
+            errors++;
+            continue;
+          }
+
+          const rol = rolRaw === "interlocutor" ? "interlocutor" : "comensal";
+
+          const existing = await storage.getUserByRut(rut);
+          if (existing) {
+            skipped++;
+            continue;
+          }
+
+          const digits = rut.replace(/[^0-9]/g, "");
+          const defaultPassword = digits.slice(0, 4) || "1234";
+          const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+          await storage.createUser({
+            rut,
+            nombre,
+            apellido,
+            password: hashedPassword,
+            role: rol,
+            casinoId: casinoId || null,
+          });
+
+          created++;
+        } catch (err: any) {
+          errorDetails.push({ row: rowNum, error: err.message || "Error desconocido" });
+          errors++;
+        }
+      }
+
+      // Clean up temp file
+      try { fs.unlinkSync(req.file.path); } catch {}
+
+      return res.json({ created, skipped, errors, errorDetails });
+    } catch (error) {
+      console.error("Upload error:", error);
+      return res.status(500).json({ message: "Error al procesar el archivo" });
+    }
+  });
+
+  // ── Seed Data ──
   app.get("/api/seed", async (_req: Request, res: Response) => {
     try {
       const existingCasinos = await storage.getCasinos();

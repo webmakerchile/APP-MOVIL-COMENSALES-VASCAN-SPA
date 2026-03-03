@@ -1,0 +1,63 @@
+Actúa como un Ingeniero de Software Full-Stack experto. Quiero desarrollar un sistema integral de gestión de alimentación para casinos de empresas, llamado "Sistema de Inscripción de Comensales" (para el cliente Vascan spa). El proyecto consta de un Backend (API REST), un Panel de Administración Web y una App Móvil (híbrida).
+
+Por favor, inicializa este proyecto creando la estructura de carpetas necesaria (monorepo o separando frontend/backend) y configura la base del código siguiendo estas especificaciones:
+
+1. STACK TECNOLÓGICO
+
+Backend: Node.js con Express.js.
+
+Base de Datos: PostgreSQL (usa Prisma ORM para facilitar el modelado).
+
+Panel Web (Admin): React.js (Vite) con Tailwind CSS para una interfaz limpia y rápida.
+
+App Móvil: React Native utilizando Expo.
+
+2. MODELO DE DATOS Y ROLES
+
+Roles de Usuario:
+
+Admin: Acceso total al panel web.
+
+Comensal: Usuario de la app móvil. Solo puede emitir 1 vale por comida.
+
+Interlocutor: Usuario especial en la app móvil. Puede emitir múltiples vales (para invitados o contrataciones nuevas, asignando siempre la "Opción 1" por defecto).
+
+Entidades principales: Usuarios (autenticación vía RUT chileno y contraseña), Casinos/Sedes, Minutas (oferta de menú para un día específico con al menos 3 opciones), y Pedidos/Inscripciones.
+
+3. REQUERIMIENTOS DEL PANEL DE ADMINISTRACIÓN WEB
+
+Gestión de Minutas (Planificación): Crear, editar y eliminar menús diarios por sede.
+
+Periodos de Inscripción: Poder configurar ventanas de tiempo estrictas (ej: "Semana 5 disponible desde lunes 08:00 hasta jueves 17:00").
+
+Carga Masiva y Excepciones: Módulo para subir un archivo Excel y cargar usuarios o inscripciones masivas.
+
+Consolidación (Programación): Vista de reportes para saber exactamente cuánto producir de cada opción.
+
+Lógica por defecto: Si un usuario asignado a un casino no se inscribe dentro del tiempo límite, un proceso en el backend debe asignarle automáticamente la "Opción 1".
+
+4. REQUERIMIENTOS DE LA APP MÓVIL (PRODUCCIÓN PARA APP STORES)
+
+Autenticación: Login simple con RUT y contraseña.
+
+Selección de Menú: Interfaz intuitiva para ver las minutas de su casino asignado y seleccionar su preferencia dentro de la ventana de tiempo permitida (visualización de 1 a 4 semanas).
+
+Offline-First: Las intermitencias de internet son constantes. La app debe guardar en caché local las minutas de la semana para visualización sin conexión, y sincronizar el pedido cuando haya red.
+
+Generación de Vale: Emisión de un vale digital/QR tras la inscripción para integración futura con tótems físicos.
+
+Preparación para Tiendas: Esta app se publicará en Apple App Store y Google Play Store. Configura el app.json de Expo con los identificadores de producción (bundleIdentifier y package, ej: com.vascan.comensales). El proyecto debe quedar listo para compilarse nativamente usando EAS Build para generar los binarios finales (.aab e .ipa) y administrar las llaves .keystore y certificados .p12.
+
+5. INSTRUCCIONES DE EJECUCIÓN PARA LA IA:
+
+Crea la estructura del proyecto e inicializa el package.json para el Backend, Web y Mobile.
+
+Crea el esquema de Prisma (PostgreSQL) con las relaciones descritas.
+
+Genera un endpoint básico de Login (/api/auth/login) y uno para obtener las minutas (/api/minutas).
+
+Construye un esqueleto del Panel Web con un dashboard básico.
+
+Construye la pantalla de Login en React Native.
+
+Detente cuando hayas configurado esta base, no intentes hacer toda la lógica de negocio de una vez. Explícame brevemente la estructura generada y dime cómo levantar cada entorno (Web, API y Expo) aquí mismo.

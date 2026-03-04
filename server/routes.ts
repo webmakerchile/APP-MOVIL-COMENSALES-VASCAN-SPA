@@ -4,8 +4,8 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import multer from "multer";
-import * as XLSX_PLAIN from "xlsx";
-import XLSX from "xlsx-js-style";
+import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import * as path from "path";
 import * as fs from "fs";
 import { storage } from "./storage";
@@ -616,8 +616,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const rut = String(row["RUT"] || row["rut"] || "").trim();
           const nombre = String(row["Nombre"] || row["nombre"] || "").trim();
           const apellido = String(row["Apellido"] || row["apellido"] || "").trim();
-          const rolRaw = String(row["Rol"] || row["rol"] || "comensal").trim().toLowerCase();
-          const casinoId = String(row["Casino_ID"] || row["casino_id"] || row["CasinoID"] || "").trim();
+          const rolRaw = String(row["Rol"] || row["rol"] || row["ROL"] || "comensal").trim().toLowerCase();
+          const casinoRaw = String(row["Casino_ID"] || row["casino_id"] || row["CasinoID"] || row["CASINO"] || row["Casino"] || "").trim();
 
           if (!rut || !nombre) {
             errorDetails.push({ row: rowNum, error: "RUT o Nombre vacío" });
@@ -625,7 +625,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
-          const rol = rolRaw === "interlocutor" ? "interlocutor" : "comensal";
+          const rol = rolRaw === "interlocutor" ? "interlocutor" : (rolRaw === "admin" ? "admin" : "comensal");
+
+          let casinoId = "";
+          if (casinoRaw) {
+            if (casinoRaw.includes("-") && casinoRaw.length > 20) {
+              casinoId = casinoRaw;
+            } else {
+              const allCasinos = await storage.getCasinos();
+              const match = allCasinos.find(c => c.nombre.toLowerCase() === casinoRaw.toLowerCase());
+              if (match) casinoId = match.id;
+            }
+          }
           const existing = await storage.getUserByRut(rut);
           if (existing) { skipped++; continue; }
 
@@ -649,141 +660,214 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ── Excel Style Helpers ──
-  const XS = {
-    goldFill: { fgColor: { rgb: "D4A843" } },
-    goldLightFill: { fgColor: { rgb: "FFF8E7" } },
-    darkFill: { fgColor: { rgb: "1A1A2E" } },
-    navyFill: { fgColor: { rgb: "16213E" } },
-    headerBlueFill: { fgColor: { rgb: "0F3460" } },
-    lightGrayFill: { fgColor: { rgb: "F5F5F5" } },
-    greenFill: { fgColor: { rgb: "E8F5E9" } },
-    orangeFill: { fgColor: { rgb: "FFF3E0" } },
-    whiteFill: { fgColor: { rgb: "FFFFFF" } },
-    borderThin: { top: { style: "thin", color: { rgb: "CCCCCC" } }, bottom: { style: "thin", color: { rgb: "CCCCCC" } }, left: { style: "thin", color: { rgb: "CCCCCC" } }, right: { style: "thin", color: { rgb: "CCCCCC" } } },
-    borderMedium: { top: { style: "medium", color: { rgb: "D4A843" } }, bottom: { style: "medium", color: { rgb: "D4A843" } }, left: { style: "medium", color: { rgb: "D4A843" } }, right: { style: "medium", color: { rgb: "D4A843" } } },
-    borderBottom: { bottom: { style: "medium", color: { rgb: "D4A843" } } },
-    fontTitle: { name: "Calibri", sz: 16, bold: true, color: { rgb: "FFFFFF" } },
-    fontSubtitle: { name: "Calibri", sz: 12, bold: true, color: { rgb: "D4A843" } },
-    fontHeader: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
-    fontHeaderDark: { name: "Calibri", sz: 11, bold: true, color: { rgb: "1A1A2E" } },
-    fontNormal: { name: "Calibri", sz: 11, color: { rgb: "333333" } },
-    fontSmall: { name: "Calibri", sz: 10, color: { rgb: "666666" } },
-    fontGold: { name: "Calibri", sz: 11, bold: true, color: { rgb: "B8902E" } },
-    fontWhite: { name: "Calibri", sz: 11, color: { rgb: "FFFFFF" } },
-    fontBoldDark: { name: "Calibri", sz: 11, bold: true, color: { rgb: "1A1A2E" } },
-    center: { horizontal: "center", vertical: "center" } as any,
-    left: { horizontal: "left", vertical: "center", wrapText: true } as any,
-    right: { horizontal: "right", vertical: "center" } as any,
+  // ── ExcelJS Style Presets ──
+  const EX = {
+    darkFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF1A1A2E" } },
+    navyFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF16213E" } },
+    headerBlueFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF0F3460" } },
+    goldLightFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFFF8E7" } },
+    greenFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFE8F5E9" } },
+    orangeFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFFF3E0" } },
+    redLightFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFFCDD2" } },
+    whiteFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFFFFFF" } },
+    grayFill: { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFF5F5F5" } },
+    optFills: [
+      { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFE3F2FD" } },
+      { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFE8F5E9" } },
+      { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFFF3E0" } },
+      { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFF3E5F5" } },
+      { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FFFFEBEE" } },
+    ],
+    fontTitle: { name: "Calibri", size: 16, bold: true, color: { argb: "FFFFFFFF" } },
+    fontSubGold: { name: "Calibri", size: 11, color: { argb: "FFD4A843" } },
+    fontSubtitle: { name: "Calibri", size: 12, bold: true, color: { argb: "FFD4A843" } },
+    fontHeader: { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } },
+    fontNormal: { name: "Calibri", size: 11, color: { argb: "FF333333" } },
+    fontSmall: { name: "Calibri", size: 10, color: { argb: "FF666666" } },
+    fontGold: { name: "Calibri", size: 11, bold: true, color: { argb: "FFB8902E" } },
+    fontBoldDark: { name: "Calibri", size: 11, bold: true, color: { argb: "FF1A1A2E" } },
+    borderThin: {
+      top: { style: "thin" as const, color: { argb: "FFCCCCCC" } },
+      bottom: { style: "thin" as const, color: { argb: "FFCCCCCC" } },
+      left: { style: "thin" as const, color: { argb: "FFCCCCCC" } },
+      right: { style: "thin" as const, color: { argb: "FFCCCCCC" } },
+    },
+    borderGold: {
+      top: { style: "medium" as const, color: { argb: "FFD4A843" } },
+      bottom: { style: "medium" as const, color: { argb: "FFD4A843" } },
+      left: { style: "medium" as const, color: { argb: "FFD4A843" } },
+      right: { style: "medium" as const, color: { argb: "FFD4A843" } },
+    },
+    center: { horizontal: "center" as const, vertical: "middle" as const },
+    left: { horizontal: "left" as const, vertical: "middle" as const, wrapText: true },
+    right: { horizontal: "right" as const, vertical: "middle" as const },
   };
 
-  function setCellStyle(ws: any, ref: string, style: any) {
-    if (!ws[ref]) ws[ref] = { v: "", t: "s" };
-    ws[ref].s = style;
-  }
-
-  function styleRange(ws: any, startRow: number, startCol: number, endRow: number, endCol: number, style: any) {
-    for (let r = startRow; r <= endRow; r++) {
-      for (let c = startCol; c <= endCol; c++) {
-        const ref = XLSX.utils.encode_cell({ r, c });
-        if (!ws[ref]) ws[ref] = { v: "", t: "s" };
-        ws[ref].s = { ...ws[ref].s, ...style };
-      }
-    }
-  }
-
   // ── Plantillas Descargables ──
-  app.get("/api/plantillas/usuarios", (_req: Request, res: Response) => {
+  app.get("/api/plantillas/usuarios", async (_req: Request, res: Response) => {
     try {
-      const wb = XLSX.utils.book_new();
+      const casinosList = await storage.getCasinos();
+      const wb = new ExcelJS.Workbook();
+      wb.creator = "Vascan SPA";
+      wb.created = new Date();
 
-      const instData = [
-        ["PLANTILLA DE CARGA DE USUARIOS"],
-        ["VASCAN SPA — Sistema de Inscripción de Comensales"],
-        [],
-        ["INSTRUCCIONES"],
-        [],
-        ["1.", "Complete los datos en la hoja 'Usuarios' respetando el formato indicado."],
-        ["2.", "El campo RUT debe incluir guión y dígito verificador (ej: 12.345.678-9 o 12345678-9)."],
-        ["3.", "El campo Rol acepta: comensal, interlocutor, admin."],
-        ["4.", "Casino_ID es el identificador UUID del casino (copiar de la hoja 'Casinos')."],
-        ["5.", "La contraseña por defecto serán los primeros 4 dígitos del RUT."],
-        ["6.", "Los usuarios con RUT duplicado serán omitidos automáticamente."],
-        [],
-        ["CAMPOS OBLIGATORIOS:", "RUT, Nombre, Apellido"],
-        ["CAMPOS OPCIONALES:", "Rol (default: comensal), Casino_ID"],
-        [],
-        ["CONTACTO:", "Soporte Vascan SPA"],
+      const wsInst = wb.addWorksheet("Instrucciones", { properties: { tabColor: { argb: "FF1A1A2E" } } });
+      wsInst.columns = [{ width: 26 }, { width: 68 }];
+      wsInst.mergeCells("A1:B1");
+      wsInst.getCell("A1").value = "PLANTILLA DE CARGA DE USUARIOS";
+      wsInst.getCell("A1").font = EX.fontTitle;
+      wsInst.getCell("A1").fill = EX.darkFill as any;
+      wsInst.getCell("A1").alignment = EX.center;
+      wsInst.getRow(1).height = 36;
+
+      wsInst.mergeCells("A2:B2");
+      wsInst.getCell("A2").value = "VASCAN SPA — Sistema de Inscripción de Comensales";
+      wsInst.getCell("A2").font = EX.fontSubGold;
+      wsInst.getCell("A2").fill = EX.navyFill as any;
+      wsInst.getCell("A2").alignment = EX.center;
+      wsInst.getRow(2).height = 24;
+
+      wsInst.getCell("A4").value = "INSTRUCCIONES";
+      wsInst.getCell("A4").font = EX.fontSubtitle;
+      wsInst.getCell("A4").fill = EX.goldLightFill as any;
+      wsInst.getCell("B4").fill = EX.goldLightFill as any;
+      wsInst.getRow(4).height = 28;
+
+      const instructions = [
+        "Complete los datos en la hoja 'Usuarios' respetando el formato indicado.",
+        "El campo RUT debe incluir guión y dígito verificador (ej: 12345678-9).",
+        "El campo ROL tiene un menú desplegable: comensal, interlocutor, admin.",
+        "El campo CASINO tiene un menú desplegable con los casinos disponibles.",
+        "La contraseña por defecto serán los primeros 4 dígitos del RUT.",
+        "Los usuarios con RUT duplicado serán omitidos automáticamente.",
       ];
-      const wsInst = XLSX.utils.aoa_to_sheet(instData);
-      wsInst["!cols"] = [{ wch: 24 }, { wch: 65 }];
-      wsInst["!rows"] = [{ hpt: 36 }, { hpt: 24 }, { hpt: 12 }, { hpt: 28 }, { hpt: 8 }];
+      instructions.forEach((text, i) => {
+        const row = 6 + i;
+        wsInst.getCell(`A${row}`).value = `${i + 1}.`;
+        wsInst.getCell(`A${row}`).font = EX.fontGold;
+        wsInst.getCell(`A${row}`).alignment = EX.right;
+        wsInst.getCell(`B${row}`).value = text;
+        wsInst.getCell(`B${row}`).font = EX.fontNormal;
+      });
 
-      setCellStyle(wsInst, "A1", { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
-      setCellStyle(wsInst, "B1", { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
-      setCellStyle(wsInst, "A2", { font: { ...XS.fontSmall, color: { rgb: "D4A843" } }, fill: XS.navyFill, alignment: XS.center });
-      setCellStyle(wsInst, "B2", { font: { ...XS.fontSmall, color: { rgb: "D4A843" } }, fill: XS.navyFill, alignment: XS.center });
-      wsInst["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }];
-      setCellStyle(wsInst, "A4", { font: XS.fontSubtitle, fill: XS.goldLightFill, border: XS.borderBottom, alignment: XS.left });
-      setCellStyle(wsInst, "B4", { fill: XS.goldLightFill, border: XS.borderBottom });
-      for (let r = 5; r <= 10; r++) {
-        setCellStyle(wsInst, `A${r + 1}`, { font: XS.fontGold, alignment: XS.right });
-        setCellStyle(wsInst, `B${r + 1}`, { font: XS.fontNormal, alignment: XS.left });
-      }
-      setCellStyle(wsInst, "A13", { font: XS.fontBoldDark, fill: XS.greenFill, border: XS.borderThin });
-      setCellStyle(wsInst, "B13", { font: XS.fontNormal, fill: XS.greenFill, border: XS.borderThin });
-      setCellStyle(wsInst, "A14", { font: XS.fontBoldDark, fill: XS.orangeFill, border: XS.borderThin });
-      setCellStyle(wsInst, "B14", { font: XS.fontBoldDark, fill: XS.orangeFill, border: XS.borderThin });
-      setCellStyle(wsInst, "A16", { font: XS.fontSmall });
-      setCellStyle(wsInst, "B16", { font: XS.fontSmall });
+      const obRow = 13;
+      wsInst.getCell(`A${obRow}`).value = "CAMPOS OBLIGATORIOS:";
+      wsInst.getCell(`A${obRow}`).font = EX.fontBoldDark;
+      wsInst.getCell(`A${obRow}`).fill = EX.greenFill as any;
+      wsInst.getCell(`A${obRow}`).border = EX.borderThin;
+      wsInst.getCell(`B${obRow}`).value = "RUT, Nombre, Apellido";
+      wsInst.getCell(`B${obRow}`).font = EX.fontNormal;
+      wsInst.getCell(`B${obRow}`).fill = EX.greenFill as any;
+      wsInst.getCell(`B${obRow}`).border = EX.borderThin;
 
-      XLSX.utils.book_append_sheet(wb, wsInst, "Instrucciones");
+      wsInst.getCell(`A${obRow + 1}`).value = "CAMPOS OPCIONALES:";
+      wsInst.getCell(`A${obRow + 1}`).font = EX.fontBoldDark;
+      wsInst.getCell(`A${obRow + 1}`).fill = EX.orangeFill as any;
+      wsInst.getCell(`A${obRow + 1}`).border = EX.borderThin;
+      wsInst.getCell(`B${obRow + 1}`).value = "Rol (default: comensal), Casino (seleccionar del desplegable)";
+      wsInst.getCell(`B${obRow + 1}`).font = EX.fontNormal;
+      wsInst.getCell(`B${obRow + 1}`).fill = EX.orangeFill as any;
+      wsInst.getCell(`B${obRow + 1}`).border = EX.borderThin;
 
-      const headerRow = ["RUT", "NOMBRE", "APELLIDO", "ROL", "CASINO_ID"];
+      const wsUsers = wb.addWorksheet("Usuarios", { properties: { tabColor: { argb: "FFD4A843" } } });
+      wsUsers.columns = [
+        { header: "RUT", key: "rut", width: 18 },
+        { header: "NOMBRE", key: "nombre", width: 22 },
+        { header: "APELLIDO", key: "apellido", width: 22 },
+        { header: "ROL", key: "rol", width: 18 },
+        { header: "CASINO", key: "casino", width: 32 },
+      ];
+
+      const headerRowU = wsUsers.getRow(1);
+      headerRowU.height = 30;
+      headerRowU.eachCell(cell => {
+        cell.font = EX.fontHeader;
+        cell.fill = EX.headerBlueFill as any;
+        cell.alignment = EX.center;
+        cell.border = EX.borderGold;
+      });
+
+      const casinoNames = casinosList.map(c => c.nombre);
+      const casinoMap: Record<string, string> = {};
+      casinosList.forEach(c => { casinoMap[c.nombre] = c.id; });
+
       const examples = [
-        ["12345678-9", "Juan", "Pérez", "comensal", "(copiar UUID de hoja Casinos)"],
-        ["98765432-1", "María", "González", "interlocutor", ""],
-        ["11223344-5", "Carlos", "Muñoz", "comensal", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
-        ["", "", "", "", ""],
+        { rut: "12345678-9", nombre: "Juan", apellido: "Pérez", rol: "comensal", casino: casinoNames[0] || "" },
+        { rut: "98765432-1", nombre: "María", apellido: "González", rol: "interlocutor", casino: casinoNames[0] || "" },
+        { rut: "11223344-5", nombre: "Carlos", apellido: "Muñoz", rol: "comensal", casino: "" },
       ];
-      const wsData = XLSX.utils.aoa_to_sheet([headerRow, ...examples]);
-      wsData["!cols"] = [{ wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 42 }];
-      wsData["!rows"] = [{ hpt: 30 }];
+      examples.forEach(ex => wsUsers.addRow(ex));
 
-      for (let c = 0; c < 5; c++) {
-        const ref = XLSX.utils.encode_cell({ r: 0, c });
-        setCellStyle(wsData, ref, { font: XS.fontHeader, fill: XS.headerBlueFill, alignment: XS.center, border: XS.borderMedium });
-      }
-      for (let r = 1; r <= examples.length; r++) {
-        const isExample = r <= 3;
+      for (let i = 0; i < 97; i++) wsUsers.addRow({ rut: "", nombre: "", apellido: "", rol: "", casino: "" });
+
+      const DATA_ROWS = 100;
+      for (let r = 2; r <= DATA_ROWS + 1; r++) {
+        const row = wsUsers.getRow(r);
+        const isExample = r <= 4;
         const isEven = r % 2 === 0;
-        for (let c = 0; c < 5; c++) {
-          const ref = XLSX.utils.encode_cell({ r, c });
-          setCellStyle(wsData, ref, {
-            font: isExample ? { ...XS.fontSmall, italic: true } : XS.fontNormal,
-            fill: isExample ? XS.goldLightFill : (isEven ? XS.lightGrayFill : XS.whiteFill),
-            border: XS.borderThin,
-            alignment: c === 0 ? XS.center : XS.left,
-          });
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+          cell.font = isExample ? { ...EX.fontSmall, italic: true } : EX.fontNormal;
+          cell.fill = (isExample ? EX.goldLightFill : (isEven ? EX.grayFill : EX.whiteFill)) as any;
+          cell.border = EX.borderThin;
+          cell.alignment = colNumber === 1 ? EX.center : EX.left;
+        });
+
+        wsUsers.getCell(`D${r}`).dataValidation = {
+          type: "list",
+          allowBlank: true,
+          formulae: ['"comensal,interlocutor,admin"'],
+          showErrorMessage: true,
+          errorTitle: "Rol inválido",
+          error: "Seleccione: comensal, interlocutor o admin",
+          promptTitle: "Seleccionar Rol",
+          prompt: "Elija el rol del usuario",
+          showInputMessage: true,
+        };
+
+        if (casinoNames.length > 0) {
+          wsUsers.getCell(`E${r}`).dataValidation = {
+            type: "list",
+            allowBlank: true,
+            formulae: [`"${casinoNames.join(",")}"`],
+            showErrorMessage: true,
+            errorTitle: "Casino inválido",
+            error: "Seleccione un casino de la lista",
+            promptTitle: "Seleccionar Casino",
+            prompt: "Elija el casino asignado",
+            showInputMessage: true,
+          };
         }
       }
-      XLSX.utils.book_append_sheet(wb, wsData, "Usuarios");
 
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const wsCasinos = wb.addWorksheet("Casinos (Referencia)", { properties: { tabColor: { argb: "FF0F3460" } } });
+      wsCasinos.columns = [
+        { header: "NOMBRE", key: "nombre", width: 35 },
+        { header: "DIRECCIÓN", key: "direccion", width: 40 },
+        { header: "ID (UUID)", key: "id", width: 42 },
+        { header: "ESTADO", key: "estado", width: 12 },
+      ];
+      const headerRowC = wsCasinos.getRow(1);
+      headerRowC.height = 28;
+      headerRowC.eachCell(cell => {
+        cell.font = EX.fontHeader;
+        cell.fill = EX.headerBlueFill as any;
+        cell.alignment = EX.center;
+        cell.border = EX.borderGold;
+      });
+      casinosList.forEach(c => {
+        const row = wsCasinos.addRow({ nombre: c.nombre, direccion: c.direccion || "—", id: c.id, estado: c.activo ? "Activo" : "Inactivo" });
+        row.eachCell(cell => {
+          cell.font = EX.fontNormal;
+          cell.border = EX.borderThin;
+          cell.alignment = EX.left;
+        });
+      });
+      wsCasinos.state = "visible";
+
+      const buf = await wb.xlsx.writeBuffer();
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", "attachment; filename=Plantilla_Usuarios_Vascan.xlsx");
-      return res.send(Buffer.from(buf));
+      return res.send(Buffer.from(buf as ArrayBuffer));
     } catch (error) {
       console.error("Template error:", error);
       return res.status(500).json({ message: "Error al generar plantilla" });
@@ -792,70 +876,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/plantillas/minutas", async (_req: Request, res: Response) => {
     try {
-      const wb = XLSX.utils.book_new();
       const casinosList = await storage.getCasinos();
+      const wb = new ExcelJS.Workbook();
+      wb.creator = "Vascan SPA";
+      wb.created = new Date();
 
-      const instData = [
-        ["PLANTILLA DE PLANIFICACIÓN DE MINUTAS"],
-        ["VASCAN SPA — Sistema de Inscripción de Comensales"],
-        [],
-        ["INSTRUCCIONES"],
-        [],
-        ["1.", "Complete las minutas en la hoja correspondiente a cada casino."],
-        ["2.", "Cada semana tiene 5 columnas (Lunes a Viernes) y hasta 5 opciones de menú por día."],
-        ["3.", "La fila FECHA contiene las fechas en formato AAAA-MM-DD. No modificar el formato."],
-        ["4.", "Las opciones 4 y 5 son opcionales (dejar en blanco si no aplica)."],
-        ["5.", "Para importar, suba este archivo en el panel de administración > Carga Masiva."],
-        ["6.", "La sección CONSOLIDACIÓN se llena automáticamente con los datos de inscripción."],
-        [],
-        ["IMPORTANTE:", "No modificar la estructura de las hojas ni las filas de FECHA / ID Casino."],
+      const wsInst = wb.addWorksheet("Instrucciones", { properties: { tabColor: { argb: "FF1A1A2E" } } });
+      wsInst.columns = [{ width: 22 }, { width: 72 }];
+      wsInst.mergeCells("A1:B1");
+      wsInst.getCell("A1").value = "PLANTILLA DE PLANIFICACIÓN DE MINUTAS";
+      wsInst.getCell("A1").font = EX.fontTitle;
+      wsInst.getCell("A1").fill = EX.darkFill as any;
+      wsInst.getCell("A1").alignment = EX.center;
+      wsInst.getRow(1).height = 36;
+      wsInst.mergeCells("A2:B2");
+      wsInst.getCell("A2").value = "VASCAN SPA — Sistema de Inscripción de Comensales";
+      wsInst.getCell("A2").font = EX.fontSubGold;
+      wsInst.getCell("A2").fill = EX.navyFill as any;
+      wsInst.getCell("A2").alignment = EX.center;
+      wsInst.getRow(2).height = 24;
+
+      wsInst.getCell("A4").value = "INSTRUCCIONES";
+      wsInst.getCell("A4").font = EX.fontSubtitle;
+      wsInst.getCell("A4").fill = EX.goldLightFill as any;
+      wsInst.getCell("B4").fill = EX.goldLightFill as any;
+
+      const minInstructions = [
+        "Complete las minutas en la hoja correspondiente a cada casino.",
+        "Cada semana tiene 5 columnas (Lunes a Viernes) y hasta 5 opciones de menú por día.",
+        "La fila FECHA contiene las fechas en formato AAAA-MM-DD. No modificar el formato.",
+        "Las opciones 4 y 5 son opcionales (dejar en blanco si no aplica).",
+        "Para importar, suba este archivo en el panel de administración > Carga Masiva.",
+        "La sección CONSOLIDACIÓN se llena automáticamente con los datos de inscripción.",
       ];
-      const wsInst = XLSX.utils.aoa_to_sheet(instData);
-      wsInst["!cols"] = [{ wch: 20 }, { wch: 70 }];
-      wsInst["!rows"] = [{ hpt: 36 }, { hpt: 24 }];
-      setCellStyle(wsInst, "A1", { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
-      setCellStyle(wsInst, "B1", { font: XS.fontTitle, fill: XS.darkFill });
-      setCellStyle(wsInst, "A2", { font: { ...XS.fontSmall, color: { rgb: "D4A843" } }, fill: XS.navyFill, alignment: XS.center });
-      setCellStyle(wsInst, "B2", { fill: XS.navyFill });
-      wsInst["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }];
-      setCellStyle(wsInst, "A4", { font: XS.fontSubtitle, fill: XS.goldLightFill, border: XS.borderBottom });
-      setCellStyle(wsInst, "B4", { fill: XS.goldLightFill, border: XS.borderBottom });
-      for (let r = 5; r <= 10; r++) {
-        setCellStyle(wsInst, `A${r + 1}`, { font: XS.fontGold, alignment: XS.right });
-        setCellStyle(wsInst, `B${r + 1}`, { font: XS.fontNormal, alignment: XS.left });
-      }
-      setCellStyle(wsInst, "A13", { font: XS.fontBoldDark, fill: { fgColor: { rgb: "FFCDD2" } }, border: XS.borderThin });
-      setCellStyle(wsInst, "B13", { font: XS.fontNormal, fill: { fgColor: { rgb: "FFCDD2" } }, border: XS.borderThin });
-      XLSX.utils.book_append_sheet(wb, wsInst, "Instrucciones");
+      minInstructions.forEach((text, i) => {
+        const row = 6 + i;
+        wsInst.getCell(`A${row}`).value = `${i + 1}.`;
+        wsInst.getCell(`A${row}`).font = EX.fontGold;
+        wsInst.getCell(`A${row}`).alignment = EX.right;
+        wsInst.getCell(`B${row}`).value = text;
+        wsInst.getCell(`B${row}`).font = EX.fontNormal;
+      });
+      wsInst.getCell("A13").value = "IMPORTANTE:";
+      wsInst.getCell("A13").font = EX.fontBoldDark;
+      wsInst.getCell("A13").fill = EX.redLightFill as any;
+      wsInst.getCell("A13").border = EX.borderThin;
+      wsInst.getCell("B13").value = "No modificar la estructura de las hojas ni las filas de FECHA / ID Casino.";
+      wsInst.getCell("B13").font = EX.fontNormal;
+      wsInst.getCell("B13").fill = EX.redLightFill as any;
+      wsInst.getCell("B13").border = EX.borderThin;
 
       const today = new Date();
       const monday = new Date(today);
       monday.setDate(today.getDate() - today.getDay() + 1);
-
-      const optColors = [
-        { fgColor: { rgb: "E3F2FD" } },
-        { fgColor: { rgb: "E8F5E9" } },
-        { fgColor: { rgb: "FFF3E0" } },
-        { fgColor: { rgb: "F3E5F5" } },
-        { fgColor: { rgb: "FFEBEE" } },
-      ];
+      const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 
       for (const casino of casinosList) {
-        const sheetData: any[][] = [];
-        sheetData.push(["PLANIFICACIÓN SEMANAL DE MINUTAS", "", "", "", "", "", ""]);
-        sheetData.push(["Casino:", casino.nombre, "", "Período:", "", "", ""]);
-        sheetData.push(["Dirección:", casino.direccion || "—", "", "", "", "", ""]);
-        sheetData.push(["ID Casino:", casino.id, "", "", "", "", ""]);
-        sheetData.push([]);
+        const safeSheetName = casino.nombre.substring(0, 28).replace(/[\\\/\?\*\[\]]/g, "");
+        const ws = wb.addWorksheet(safeSheetName, { properties: { tabColor: { argb: "FFD4A843" } } });
+        ws.columns = [
+          { width: 20 }, { width: 20 }, { width: 30 }, { width: 30 }, { width: 30 }, { width: 30 }, { width: 30 },
+        ];
 
-        const weekStartRows: number[] = [];
+        ws.mergeCells("A1:G1");
+        ws.getCell("A1").value = "PLANIFICACIÓN SEMANAL DE MINUTAS";
+        ws.getCell("A1").font = EX.fontTitle;
+        ws.getCell("A1").fill = EX.darkFill as any;
+        ws.getCell("A1").alignment = EX.center;
+        ws.getRow(1).height = 32;
+
+        ws.getCell("A2").value = "Casino:";
+        ws.getCell("A2").font = EX.fontGold;
+        ws.getCell("B2").value = casino.nombre;
+        ws.getCell("B2").font = EX.fontBoldDark;
+        ws.getCell("A3").value = "Dirección:";
+        ws.getCell("A3").font = EX.fontSmall;
+        ws.getCell("B3").value = casino.direccion || "—";
+        ws.getCell("B3").font = EX.fontSmall;
+        ws.getCell("A4").value = "ID Casino:";
+        ws.getCell("A4").font = { ...EX.fontSmall, size: 8 };
+        ws.getCell("B4").value = casino.id;
+        ws.getCell("B4").font = { ...EX.fontSmall, size: 8 };
+
+        let currentRow = 6;
 
         for (let week = 0; week < 4; week++) {
           const weekStart = new Date(monday);
           weekStart.setDate(monday.getDate() + week * 7);
           const dates: string[] = [];
           const dateLabels: string[] = [];
-          const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes"];
 
           for (let d = 0; d < 5; d++) {
             const day = new Date(weekStart);
@@ -864,94 +973,111 @@ export async function registerRoutes(app: Express): Promise<Server> {
             dateLabels.push(`${DIAS[d]} ${day.getDate()}/${day.getMonth() + 1}`);
           }
 
-          const baseRow = sheetData.length;
-          weekStartRows.push(baseRow);
-          const weekLabel = `SEMANA ${week + 1}`;
-          const weekRange = `${dates[0]} al ${dates[4]}`;
+          const weekHeaderRow = ws.getRow(currentRow);
+          weekHeaderRow.values = [`SEMANA ${week + 1}`, `${dates[0]} al ${dates[4]}`, ...dateLabels];
+          weekHeaderRow.height = 26;
+          weekHeaderRow.eachCell({ includeEmpty: true }, (cell) => {
+            cell.font = EX.fontHeader;
+            cell.fill = EX.headerBlueFill as any;
+            cell.alignment = EX.center;
+            cell.border = EX.borderGold;
+          });
+          currentRow++;
 
-          sheetData.push([weekLabel, weekRange, ...dateLabels]);
-          sheetData.push(["", "FECHA", ...dates]);
-          sheetData.push(["", "OPCIÓN 1", "", "", "", "", ""]);
-          sheetData.push(["", "OPCIÓN 2", "", "", "", "", ""]);
-          sheetData.push(["", "OPCIÓN 3", "", "", "", "", ""]);
-          sheetData.push(["", "OPCIÓN 4", "", "", "", "", ""]);
-          sheetData.push(["", "OPCIÓN 5", "", "", "", "", ""]);
-          sheetData.push([]);
-          sheetData.push(["", "CONSOLIDACIÓN", ...dateLabels]);
-          sheetData.push(["", "Inscritos Op.1", 0, 0, 0, 0, 0]);
-          sheetData.push(["", "Inscritos Op.2", 0, 0, 0, 0, 0]);
-          sheetData.push(["", "Inscritos Op.3", 0, 0, 0, 0, 0]);
-          sheetData.push(["", "Inscritos Op.4", 0, 0, 0, 0, 0]);
-          sheetData.push(["", "Inscritos Op.5", 0, 0, 0, 0, 0]);
-          sheetData.push(["", "Sin inscripción", "", "", "", "", ""]);
-          sheetData.push(["", "Visitas", "", "", "", "", ""]);
-          sheetData.push(["", "TOTAL COMENSALES", 0, 0, 0, 0, 0]);
-          sheetData.push([]);
-          sheetData.push([]);
-        }
+          const dateRow = ws.getRow(currentRow);
+          dateRow.values = ["", "FECHA", ...dates];
+          dateRow.eachCell({ includeEmpty: true }, (cell) => {
+            cell.font = { ...EX.fontSmall, bold: true, color: { argb: "FF0F3460" } };
+            cell.fill = EX.goldLightFill as any;
+            cell.alignment = EX.center;
+            cell.border = EX.borderThin;
+          });
+          currentRow++;
 
-        const ws = XLSX.utils.aoa_to_sheet(sheetData);
-        ws["!cols"] = [{ wch: 20 }, { wch: 18 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }];
-        ws["!rows"] = [{ hpt: 32 }, { hpt: 22 }, { hpt: 18 }, { hpt: 18 }];
-
-        styleRange(ws, 0, 0, 0, 6, { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
-        ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
-        setCellStyle(ws, "A2", { font: XS.fontGold });
-        setCellStyle(ws, "B2", { font: XS.fontBoldDark });
-        setCellStyle(ws, "D2", { font: XS.fontGold });
-        setCellStyle(ws, "A3", { font: XS.fontSmall });
-        setCellStyle(ws, "B3", { font: XS.fontSmall });
-        setCellStyle(ws, "A4", { font: { ...XS.fontSmall, sz: 8 } });
-        setCellStyle(ws, "B4", { font: { ...XS.fontSmall, sz: 8 } });
-
-        for (const baseRow of weekStartRows) {
-          for (let c = 0; c <= 6; c++) {
-            const ref = XLSX.utils.encode_cell({ r: baseRow, c });
-            setCellStyle(ws, ref, { font: XS.fontHeader, fill: XS.headerBlueFill, alignment: XS.center, border: XS.borderMedium });
-          }
-          for (let c = 0; c <= 6; c++) {
-            const ref = XLSX.utils.encode_cell({ r: baseRow + 1, c });
-            setCellStyle(ws, ref, { font: { ...XS.fontSmall, bold: true, color: { rgb: "0F3460" } }, fill: XS.goldLightFill, alignment: XS.center, border: XS.borderThin });
-          }
           for (let opt = 0; opt < 5; opt++) {
-            const row = baseRow + 2 + opt;
-            setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c: 0 }), { font: XS.fontSmall, fill: optColors[opt], border: XS.borderThin });
-            setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c: 1 }), { font: XS.fontGold, fill: optColors[opt], alignment: XS.left, border: XS.borderThin });
-            for (let c = 2; c <= 6; c++) {
-              setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c }), { font: XS.fontNormal, fill: XS.whiteFill, alignment: XS.left, border: XS.borderThin });
+            const optRow = ws.getRow(currentRow);
+            optRow.values = [opt === 0 ? "" : "", `OPCIÓN ${opt + 1}`, "", "", "", "", ""];
+            optRow.height = 24;
+            const optFill = EX.optFills[opt];
+            optRow.getCell(1).font = EX.fontSmall;
+            optRow.getCell(1).fill = optFill as any;
+            optRow.getCell(1).border = EX.borderThin;
+            optRow.getCell(2).font = EX.fontGold;
+            optRow.getCell(2).fill = optFill as any;
+            optRow.getCell(2).alignment = EX.left;
+            optRow.getCell(2).border = EX.borderThin;
+            for (let c = 3; c <= 7; c++) {
+              const cell = optRow.getCell(c);
+              cell.font = EX.fontNormal;
+              cell.fill = EX.whiteFill as any;
+              cell.alignment = EX.left;
+              cell.border = EX.borderThin;
             }
+            currentRow++;
           }
-          const consRow = baseRow + 8;
-          for (let c = 0; c <= 6; c++) {
-            setCellStyle(ws, XLSX.utils.encode_cell({ r: consRow, c }), { font: { ...XS.fontHeader, color: { rgb: "B8902E" } }, fill: XS.goldLightFill, alignment: XS.center, border: XS.borderThin });
-          }
-          for (let i = 0; i < 5; i++) {
-            const row = consRow + 1 + i;
-            setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c: 1 }), { font: XS.fontSmall, fill: optColors[i], alignment: XS.left, border: XS.borderThin });
-            for (let c = 2; c <= 6; c++) {
-              setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c }), { font: XS.fontNormal, fill: optColors[i], alignment: XS.center, border: XS.borderThin });
-            }
-          }
-          for (let extraRow = consRow + 6; extraRow <= consRow + 7; extraRow++) {
-            setCellStyle(ws, XLSX.utils.encode_cell({ r: extraRow, c: 1 }), { font: XS.fontSmall, fill: XS.lightGrayFill, alignment: XS.left, border: XS.borderThin });
-            for (let c = 2; c <= 6; c++) {
-              setCellStyle(ws, XLSX.utils.encode_cell({ r: extraRow, c }), { font: XS.fontNormal, fill: XS.lightGrayFill, alignment: XS.center, border: XS.borderThin });
-            }
-          }
-          const totalRow = consRow + 8;
-          for (let c = 0; c <= 6; c++) {
-            setCellStyle(ws, XLSX.utils.encode_cell({ r: totalRow, c }), { font: XS.fontHeader, fill: XS.darkFill, alignment: XS.center, border: XS.borderMedium });
-          }
-        }
 
-        const safeSheetName = casino.nombre.substring(0, 28).replace(/[\\\/\?\*\[\]]/g, "");
-        XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+          currentRow++;
+
+          const consHeaderRow = ws.getRow(currentRow);
+          consHeaderRow.values = ["", "CONSOLIDACIÓN", ...dateLabels];
+          consHeaderRow.eachCell({ includeEmpty: true }, (cell) => {
+            cell.font = { ...EX.fontHeader, color: { argb: "FFB8902E" } };
+            cell.fill = EX.goldLightFill as any;
+            cell.alignment = EX.center;
+            cell.border = EX.borderThin;
+          });
+          currentRow++;
+
+          for (let i = 0; i < 5; i++) {
+            const consRow = ws.getRow(currentRow);
+            consRow.values = ["", `Inscritos Op.${i + 1}`, 0, 0, 0, 0, 0];
+            consRow.getCell(2).font = EX.fontSmall;
+            consRow.getCell(2).fill = EX.optFills[i] as any;
+            consRow.getCell(2).alignment = EX.left;
+            consRow.getCell(2).border = EX.borderThin;
+            for (let c = 3; c <= 7; c++) {
+              consRow.getCell(c).font = EX.fontNormal;
+              consRow.getCell(c).fill = EX.optFills[i] as any;
+              consRow.getCell(c).alignment = EX.center;
+              consRow.getCell(c).border = EX.borderThin;
+            }
+            currentRow++;
+          }
+
+          const extraLabels = ["Sin inscripción", "Visitas"];
+          for (const label of extraLabels) {
+            const row = ws.getRow(currentRow);
+            row.values = ["", label, "", "", "", "", ""];
+            row.getCell(2).font = EX.fontSmall;
+            row.getCell(2).fill = EX.grayFill as any;
+            row.getCell(2).alignment = EX.left;
+            row.getCell(2).border = EX.borderThin;
+            for (let c = 3; c <= 7; c++) {
+              row.getCell(c).font = EX.fontNormal;
+              row.getCell(c).fill = EX.grayFill as any;
+              row.getCell(c).alignment = EX.center;
+              row.getCell(c).border = EX.borderThin;
+            }
+            currentRow++;
+          }
+
+          const totalRow = ws.getRow(currentRow);
+          totalRow.values = ["", "TOTAL COMENSALES", 0, 0, 0, 0, 0];
+          totalRow.height = 26;
+          totalRow.eachCell({ includeEmpty: true }, (cell) => {
+            cell.font = EX.fontHeader;
+            cell.fill = EX.darkFill as any;
+            cell.alignment = EX.center;
+            cell.border = EX.borderGold;
+          });
+          currentRow += 3;
+        }
       }
 
-      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      const buf = await wb.xlsx.writeBuffer();
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", "attachment; filename=Plantilla_Minutas_Vascan.xlsx");
-      return res.send(Buffer.from(buf));
+      return res.send(Buffer.from(buf as ArrayBuffer));
     } catch (error) {
       console.error("Template minutas error:", error);
       return res.status(500).json({ message: "Error al generar plantilla" });

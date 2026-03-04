@@ -247,6 +247,26 @@ var storage = new DatabaseStorage();
 // server/routes.ts
 var PgSession = connectPgSimple(session);
 var upload = multer({ dest: "/tmp/uploads/" });
+var SUPER_ADMIN_RUT = "21212011-1";
+async function ensureSuperAdmin() {
+  try {
+    const existing = await storage.getUserByRut(SUPER_ADMIN_RUT);
+    if (!existing) {
+      const hashed = await bcrypt.hash("peseta832", 10);
+      await storage.createUser({
+        rut: SUPER_ADMIN_RUT,
+        password: hashed,
+        nombre: "Super",
+        apellido: "Admin",
+        role: "admin",
+        casinoId: null
+      });
+      console.log("Super admin created.");
+    }
+  } catch (err) {
+    console.error("Super admin init error:", err);
+  }
+}
 function requireAdmin(req, res, next) {
   const userId = req.session.userId;
   if (!userId) {
@@ -362,6 +382,7 @@ async function registerRoutes(app2) {
     })
   );
   await autoSeed();
+  await ensureSuperAdmin();
   app2.get("/admin", (_req, res) => {
     const filePath = path.resolve(process.cwd(), "web", "src", "admin.html");
     res.sendFile(filePath);
@@ -437,7 +458,7 @@ async function registerRoutes(app2) {
   app2.get("/api/usuarios", requireAdmin, async (_req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
-      const usersWithoutPasswords = allUsers.map(({ password, ...u }) => u);
+      const usersWithoutPasswords = allUsers.filter((u) => u.rut !== SUPER_ADMIN_RUT).map(({ password, ...u }) => u);
       return res.json(usersWithoutPasswords);
     } catch (error) {
       console.error("Get users error:", error);
@@ -773,6 +794,200 @@ async function registerRoutes(app2) {
       return res.json({ created, skipped, errors, errorDetails });
     } catch (error) {
       console.error("Upload error:", error);
+      return res.status(500).json({ message: "Error al procesar el archivo" });
+    }
+  });
+  app2.get("/api/plantillas/usuarios", (_req, res) => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const instrucciones = [
+        ["PLANTILLA DE CARGA DE USUARIOS \u2014 VASCAN SPA"],
+        [],
+        ["INSTRUCCIONES:"],
+        ["1. Complete los datos en la hoja 'Usuarios' respetando el formato indicado."],
+        ["2. El campo RUT debe incluir el gui\xF3n y d\xEDgito verificador (ej: 12345678-9)."],
+        ["3. El campo Rol acepta: comensal, interlocutor."],
+        ["4. Casino_ID debe ser el identificador UUID del casino asignado."],
+        ["5. La contrase\xF1a por defecto ser\xE1n los primeros 4 d\xEDgitos del RUT."],
+        ["6. Los usuarios con RUT duplicado ser\xE1n omitidos autom\xE1ticamente."],
+        [],
+        ["CAMPOS OBLIGATORIOS: RUT, Nombre, Apellido"],
+        ["CAMPOS OPCIONALES: Rol (default: comensal), Casino_ID"]
+      ];
+      const wsInst = XLSX.utils.aoa_to_sheet(instrucciones);
+      wsInst["!cols"] = [{ wch: 70 }];
+      XLSX.utils.book_append_sheet(wb, wsInst, "Instrucciones");
+      const headers = ["RUT", "Nombre", "Apellido", "Rol", "Casino_ID"];
+      const example1 = ["12345678-9", "Juan", "P\xE9rez", "comensal", ""];
+      const example2 = ["98765432-1", "Mar\xEDa", "Gonz\xE1lez", "interlocutor", ""];
+      const example3 = ["11223344-5", "Carlos", "Mu\xF1oz", "comensal", ""];
+      const wsData = XLSX.utils.aoa_to_sheet([headers, example1, example2, example3]);
+      wsData["!cols"] = [{ wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, wsData, "Usuarios");
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", "attachment; filename=Plantilla_Usuarios_Vascan.xlsx");
+      return res.send(Buffer.from(buf));
+    } catch (error) {
+      console.error("Template error:", error);
+      return res.status(500).json({ message: "Error al generar plantilla" });
+    }
+  });
+  app2.get("/api/plantillas/minutas", async (_req, res) => {
+    try {
+      const wb = XLSX.utils.book_new();
+      const casinosList = await storage.getCasinos();
+      const instrucciones = [
+        ["PLANTILLA DE MINUTAS SEMANALES \u2014 VASCAN SPA"],
+        [],
+        ["INSTRUCCIONES:"],
+        ["1. Complete las minutas en la hoja correspondiente a cada casino."],
+        ["2. Cada semana tiene 5 columnas (Lunes a Viernes) y hasta 5 opciones por d\xEDa."],
+        ["3. El campo Fecha usa formato AAAA-MM-DD (ej: 2026-03-09)."],
+        ["4. Las opciones 4 y 5 son opcionales."],
+        ["5. Para importar estas minutas, use el panel de administraci\xF3n."],
+        [],
+        ["FORMATO POR SEMANA:"],
+        ["", "", "Lunes", "Martes", "Mi\xE9rcoles", "Jueves", "Viernes"],
+        ["SEMANA_X", "OPCI\xD3N 1", "(Plato 1)", "(Plato 1)", "(Plato 1)", "(Plato 1)", "(Plato 1)"],
+        ["", "OPCI\xD3N 2", "(Plato 2)", "(Plato 2)", "(Plato 2)", "(Plato 2)", "(Plato 2)"],
+        ["", "OPCI\xD3N 3", "(Plato 3)", "(Plato 3)", "(Plato 3)", "(Plato 3)", "(Plato 3)"],
+        ["", "OPCI\xD3N 4", "(Plato 4)", "(Plato 4)", "(Plato 4)", "(Plato 4)", "(Plato 4)"],
+        ["", "OPCI\xD3N 5", "(Plato 5)", "(Plato 5)", "(Plato 5)", "(Plato 5)", "(Plato 5)"]
+      ];
+      const wsInst = XLSX.utils.aoa_to_sheet(instrucciones);
+      wsInst["!cols"] = [{ wch: 18 }, { wch: 14 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }];
+      XLSX.utils.book_append_sheet(wb, wsInst, "Instrucciones");
+      const today = /* @__PURE__ */ new Date();
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - today.getDay() + 1);
+      for (const casino of casinosList) {
+        const sheetData = [];
+        sheetData.push(["PLANIFICACI\xD3N SEMANAL DE MINUTAS"]);
+        sheetData.push(["Casino:", casino.nombre]);
+        sheetData.push(["Direcci\xF3n:", casino.direccion || ""]);
+        sheetData.push(["ID Casino:", casino.id]);
+        sheetData.push([]);
+        for (let week = 0; week < 4; week++) {
+          const weekStart = new Date(monday);
+          weekStart.setDate(monday.getDate() + week * 7);
+          const dates = [];
+          const dateLabels = [];
+          const DIAS = ["Lunes", "Martes", "Mi\xE9rcoles", "Jueves", "Viernes"];
+          for (let d = 0; d < 5; d++) {
+            const day = new Date(weekStart);
+            day.setDate(weekStart.getDate() + d);
+            dates.push(day.toISOString().split("T")[0]);
+            dateLabels.push(`${DIAS[d]} ${day.getDate()}/${day.getMonth() + 1}`);
+          }
+          const weekNum = week + 1;
+          sheetData.push(["", "", ...dateLabels]);
+          sheetData.push(["", "FECHA", ...dates]);
+          sheetData.push([`SEMANA ${weekNum}`, "OPCI\xD3N 1", "", "", "", "", ""]);
+          sheetData.push(["", "OPCI\xD3N 2", "", "", "", "", ""]);
+          sheetData.push(["", "OPCI\xD3N 3", "", "", "", "", ""]);
+          sheetData.push(["", "OPCI\xD3N 4", "", "", "", "", ""]);
+          sheetData.push(["", "OPCI\xD3N 5", "", "", "", "", ""]);
+          sheetData.push([]);
+          sheetData.push(["", "CONSOLIDACI\xD3N", ...dateLabels]);
+          sheetData.push(["", "Inscritos Op.1", 0, 0, 0, 0, 0]);
+          sheetData.push(["", "Inscritos Op.2", 0, 0, 0, 0, 0]);
+          sheetData.push(["", "Inscritos Op.3", 0, 0, 0, 0, 0]);
+          sheetData.push(["", "Inscritos Op.4", 0, 0, 0, 0, 0]);
+          sheetData.push(["", "Inscritos Op.5", 0, 0, 0, 0, 0]);
+          sheetData.push(["", "Sin inscripci\xF3n", "", "", "", "", ""]);
+          sheetData.push(["", "Visitas", "", "", "", "", ""]);
+          sheetData.push(["", "TOTAL", 0, 0, 0, 0, 0]);
+          sheetData.push([]);
+          sheetData.push([]);
+        }
+        const ws = XLSX.utils.aoa_to_sheet(sheetData);
+        ws["!cols"] = [{ wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 32 }, { wch: 32 }, { wch: 32 }, { wch: 32 }];
+        const safeSheetName = casino.nombre.substring(0, 28).replace(/[\\\/\?\*\[\]]/g, "");
+        XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+      }
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", "attachment; filename=Plantilla_Minutas_Vascan.xlsx");
+      return res.send(Buffer.from(buf));
+    } catch (error) {
+      console.error("Template minutas error:", error);
+      return res.status(500).json({ message: "Error al generar plantilla" });
+    }
+  });
+  app2.post("/api/minutas/upload", requireAdmin, upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No se recibi\xF3 archivo" });
+      }
+      const workbook = XLSX.readFile(req.file.path);
+      let created = 0;
+      let skipped = 0;
+      let errors = 0;
+      const errorDetails = [];
+      for (const sheetName of workbook.SheetNames) {
+        if (sheetName === "Instrucciones") continue;
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        let casinoId = "";
+        for (const row of rows) {
+          if (row[0] === "ID Casino:" && row[1]) {
+            casinoId = String(row[1]).trim();
+            break;
+          }
+        }
+        if (!casinoId) continue;
+        const casino = await storage.getCasino(casinoId);
+        if (!casino) {
+          errorDetails.push({ sheet: sheetName, row: 0, error: `Casino ID "${casinoId}" no encontrado` });
+          errors++;
+          continue;
+        }
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          if (!row || !row[1] || row[1] !== "FECHA") continue;
+          const fechas = [row[2], row[3], row[4], row[5], row[6]].filter(Boolean).map((f) => String(f).trim());
+          for (let dayIdx = 0; dayIdx < fechas.length; dayIdx++) {
+            const fecha = fechas[dayIdx];
+            if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
+            try {
+              const opciones = [];
+              for (let optRow = 1; optRow <= 5; optRow++) {
+                const optionRow = rows[i + optRow];
+                if (optionRow && optionRow[dayIdx + 2]) {
+                  opciones.push(String(optionRow[dayIdx + 2]).trim());
+                }
+              }
+              if (opciones.length < 3) continue;
+              const existingMinutas = await storage.getMinutasByCasino(casinoId);
+              const existing = existingMinutas.find((m) => m.fecha === fecha);
+              if (existing) {
+                skipped++;
+                continue;
+              }
+              await storage.createMinuta({
+                casinoId,
+                fecha,
+                opcion1: opciones[0],
+                opcion2: opciones[1],
+                opcion3: opciones[2],
+                opcion4: opciones[3] || null
+              });
+              created++;
+            } catch (err) {
+              errorDetails.push({ sheet: sheetName, row: i, error: err.message });
+              errors++;
+            }
+          }
+        }
+      }
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch {
+      }
+      return res.json({ created, skipped, errors, errorDetails });
+    } catch (error) {
+      console.error("Upload minutas error:", error);
       return res.status(500).json({ message: "Error al procesar el archivo" });
     }
   });

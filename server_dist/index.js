@@ -13,7 +13,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import multer from "multer";
-import * as XLSX from "xlsx";
+import XLSX from "xlsx-js-style";
 import * as path from "path";
 import * as fs from "fs";
 
@@ -797,32 +797,125 @@ async function registerRoutes(app2) {
       return res.status(500).json({ message: "Error al procesar el archivo" });
     }
   });
+  const XS = {
+    goldFill: { fgColor: { rgb: "D4A843" } },
+    goldLightFill: { fgColor: { rgb: "FFF8E7" } },
+    darkFill: { fgColor: { rgb: "1A1A2E" } },
+    navyFill: { fgColor: { rgb: "16213E" } },
+    headerBlueFill: { fgColor: { rgb: "0F3460" } },
+    lightGrayFill: { fgColor: { rgb: "F5F5F5" } },
+    greenFill: { fgColor: { rgb: "E8F5E9" } },
+    orangeFill: { fgColor: { rgb: "FFF3E0" } },
+    whiteFill: { fgColor: { rgb: "FFFFFF" } },
+    borderThin: { top: { style: "thin", color: { rgb: "CCCCCC" } }, bottom: { style: "thin", color: { rgb: "CCCCCC" } }, left: { style: "thin", color: { rgb: "CCCCCC" } }, right: { style: "thin", color: { rgb: "CCCCCC" } } },
+    borderMedium: { top: { style: "medium", color: { rgb: "D4A843" } }, bottom: { style: "medium", color: { rgb: "D4A843" } }, left: { style: "medium", color: { rgb: "D4A843" } }, right: { style: "medium", color: { rgb: "D4A843" } } },
+    borderBottom: { bottom: { style: "medium", color: { rgb: "D4A843" } } },
+    fontTitle: { name: "Calibri", sz: 16, bold: true, color: { rgb: "FFFFFF" } },
+    fontSubtitle: { name: "Calibri", sz: 12, bold: true, color: { rgb: "D4A843" } },
+    fontHeader: { name: "Calibri", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    fontHeaderDark: { name: "Calibri", sz: 11, bold: true, color: { rgb: "1A1A2E" } },
+    fontNormal: { name: "Calibri", sz: 11, color: { rgb: "333333" } },
+    fontSmall: { name: "Calibri", sz: 10, color: { rgb: "666666" } },
+    fontGold: { name: "Calibri", sz: 11, bold: true, color: { rgb: "B8902E" } },
+    fontWhite: { name: "Calibri", sz: 11, color: { rgb: "FFFFFF" } },
+    fontBoldDark: { name: "Calibri", sz: 11, bold: true, color: { rgb: "1A1A2E" } },
+    center: { horizontal: "center", vertical: "center" },
+    left: { horizontal: "left", vertical: "center", wrapText: true },
+    right: { horizontal: "right", vertical: "center" }
+  };
+  function setCellStyle(ws, ref, style) {
+    if (!ws[ref]) ws[ref] = { v: "", t: "s" };
+    ws[ref].s = style;
+  }
+  function styleRange(ws, startRow, startCol, endRow, endCol, style) {
+    for (let r = startRow; r <= endRow; r++) {
+      for (let c = startCol; c <= endCol; c++) {
+        const ref = XLSX.utils.encode_cell({ r, c });
+        if (!ws[ref]) ws[ref] = { v: "", t: "s" };
+        ws[ref].s = { ...ws[ref].s, ...style };
+      }
+    }
+  }
   app2.get("/api/plantillas/usuarios", (_req, res) => {
     try {
       const wb = XLSX.utils.book_new();
-      const instrucciones = [
-        ["PLANTILLA DE CARGA DE USUARIOS \u2014 VASCAN SPA"],
+      const instData = [
+        ["PLANTILLA DE CARGA DE USUARIOS"],
+        ["VASCAN SPA \u2014 Sistema de Inscripci\xF3n de Comensales"],
         [],
-        ["INSTRUCCIONES:"],
-        ["1. Complete los datos en la hoja 'Usuarios' respetando el formato indicado."],
-        ["2. El campo RUT debe incluir el gui\xF3n y d\xEDgito verificador (ej: 12345678-9)."],
-        ["3. El campo Rol acepta: comensal, interlocutor."],
-        ["4. Casino_ID debe ser el identificador UUID del casino asignado."],
-        ["5. La contrase\xF1a por defecto ser\xE1n los primeros 4 d\xEDgitos del RUT."],
-        ["6. Los usuarios con RUT duplicado ser\xE1n omitidos autom\xE1ticamente."],
+        ["INSTRUCCIONES"],
         [],
-        ["CAMPOS OBLIGATORIOS: RUT, Nombre, Apellido"],
-        ["CAMPOS OPCIONALES: Rol (default: comensal), Casino_ID"]
+        ["1.", "Complete los datos en la hoja 'Usuarios' respetando el formato indicado."],
+        ["2.", "El campo RUT debe incluir gui\xF3n y d\xEDgito verificador (ej: 12.345.678-9 o 12345678-9)."],
+        ["3.", "El campo Rol acepta: comensal, interlocutor, admin."],
+        ["4.", "Casino_ID es el identificador UUID del casino (copiar de la hoja 'Casinos')."],
+        ["5.", "La contrase\xF1a por defecto ser\xE1n los primeros 4 d\xEDgitos del RUT."],
+        ["6.", "Los usuarios con RUT duplicado ser\xE1n omitidos autom\xE1ticamente."],
+        [],
+        ["CAMPOS OBLIGATORIOS:", "RUT, Nombre, Apellido"],
+        ["CAMPOS OPCIONALES:", "Rol (default: comensal), Casino_ID"],
+        [],
+        ["CONTACTO:", "Soporte Vascan SPA"]
       ];
-      const wsInst = XLSX.utils.aoa_to_sheet(instrucciones);
-      wsInst["!cols"] = [{ wch: 70 }];
+      const wsInst = XLSX.utils.aoa_to_sheet(instData);
+      wsInst["!cols"] = [{ wch: 24 }, { wch: 65 }];
+      wsInst["!rows"] = [{ hpt: 36 }, { hpt: 24 }, { hpt: 12 }, { hpt: 28 }, { hpt: 8 }];
+      setCellStyle(wsInst, "A1", { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
+      setCellStyle(wsInst, "B1", { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
+      setCellStyle(wsInst, "A2", { font: { ...XS.fontSmall, color: { rgb: "D4A843" } }, fill: XS.navyFill, alignment: XS.center });
+      setCellStyle(wsInst, "B2", { font: { ...XS.fontSmall, color: { rgb: "D4A843" } }, fill: XS.navyFill, alignment: XS.center });
+      wsInst["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }];
+      setCellStyle(wsInst, "A4", { font: XS.fontSubtitle, fill: XS.goldLightFill, border: XS.borderBottom, alignment: XS.left });
+      setCellStyle(wsInst, "B4", { fill: XS.goldLightFill, border: XS.borderBottom });
+      for (let r = 5; r <= 10; r++) {
+        setCellStyle(wsInst, `A${r + 1}`, { font: XS.fontGold, alignment: XS.right });
+        setCellStyle(wsInst, `B${r + 1}`, { font: XS.fontNormal, alignment: XS.left });
+      }
+      setCellStyle(wsInst, "A13", { font: XS.fontBoldDark, fill: XS.greenFill, border: XS.borderThin });
+      setCellStyle(wsInst, "B13", { font: XS.fontNormal, fill: XS.greenFill, border: XS.borderThin });
+      setCellStyle(wsInst, "A14", { font: XS.fontBoldDark, fill: XS.orangeFill, border: XS.borderThin });
+      setCellStyle(wsInst, "B14", { font: XS.fontBoldDark, fill: XS.orangeFill, border: XS.borderThin });
+      setCellStyle(wsInst, "A16", { font: XS.fontSmall });
+      setCellStyle(wsInst, "B16", { font: XS.fontSmall });
       XLSX.utils.book_append_sheet(wb, wsInst, "Instrucciones");
-      const headers = ["RUT", "Nombre", "Apellido", "Rol", "Casino_ID"];
-      const example1 = ["12345678-9", "Juan", "P\xE9rez", "comensal", ""];
-      const example2 = ["98765432-1", "Mar\xEDa", "Gonz\xE1lez", "interlocutor", ""];
-      const example3 = ["11223344-5", "Carlos", "Mu\xF1oz", "comensal", ""];
-      const wsData = XLSX.utils.aoa_to_sheet([headers, example1, example2, example3]);
-      wsData["!cols"] = [{ wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 15 }, { wch: 40 }];
+      const headerRow = ["RUT", "NOMBRE", "APELLIDO", "ROL", "CASINO_ID"];
+      const examples = [
+        ["12345678-9", "Juan", "P\xE9rez", "comensal", "(copiar UUID de hoja Casinos)"],
+        ["98765432-1", "Mar\xEDa", "Gonz\xE1lez", "interlocutor", ""],
+        ["11223344-5", "Carlos", "Mu\xF1oz", "comensal", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""],
+        ["", "", "", "", ""]
+      ];
+      const wsData = XLSX.utils.aoa_to_sheet([headerRow, ...examples]);
+      wsData["!cols"] = [{ wch: 18 }, { wch: 22 }, { wch: 22 }, { wch: 16 }, { wch: 42 }];
+      wsData["!rows"] = [{ hpt: 30 }];
+      for (let c = 0; c < 5; c++) {
+        const ref = XLSX.utils.encode_cell({ r: 0, c });
+        setCellStyle(wsData, ref, { font: XS.fontHeader, fill: XS.headerBlueFill, alignment: XS.center, border: XS.borderMedium });
+      }
+      for (let r = 1; r <= examples.length; r++) {
+        const isExample = r <= 3;
+        const isEven = r % 2 === 0;
+        for (let c = 0; c < 5; c++) {
+          const ref = XLSX.utils.encode_cell({ r, c });
+          setCellStyle(wsData, ref, {
+            font: isExample ? { ...XS.fontSmall, italic: true } : XS.fontNormal,
+            fill: isExample ? XS.goldLightFill : isEven ? XS.lightGrayFill : XS.whiteFill,
+            border: XS.borderThin,
+            alignment: c === 0 ? XS.center : XS.left
+          });
+        }
+      }
       XLSX.utils.book_append_sheet(wb, wsData, "Usuarios");
       const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -837,37 +930,56 @@ async function registerRoutes(app2) {
     try {
       const wb = XLSX.utils.book_new();
       const casinosList = await storage.getCasinos();
-      const instrucciones = [
-        ["PLANTILLA DE MINUTAS SEMANALES \u2014 VASCAN SPA"],
+      const instData = [
+        ["PLANTILLA DE PLANIFICACI\xD3N DE MINUTAS"],
+        ["VASCAN SPA \u2014 Sistema de Inscripci\xF3n de Comensales"],
         [],
-        ["INSTRUCCIONES:"],
-        ["1. Complete las minutas en la hoja correspondiente a cada casino."],
-        ["2. Cada semana tiene 5 columnas (Lunes a Viernes) y hasta 5 opciones por d\xEDa."],
-        ["3. El campo Fecha usa formato AAAA-MM-DD (ej: 2026-03-09)."],
-        ["4. Las opciones 4 y 5 son opcionales."],
-        ["5. Para importar estas minutas, use el panel de administraci\xF3n."],
+        ["INSTRUCCIONES"],
         [],
-        ["FORMATO POR SEMANA:"],
-        ["", "", "Lunes", "Martes", "Mi\xE9rcoles", "Jueves", "Viernes"],
-        ["SEMANA_X", "OPCI\xD3N 1", "(Plato 1)", "(Plato 1)", "(Plato 1)", "(Plato 1)", "(Plato 1)"],
-        ["", "OPCI\xD3N 2", "(Plato 2)", "(Plato 2)", "(Plato 2)", "(Plato 2)", "(Plato 2)"],
-        ["", "OPCI\xD3N 3", "(Plato 3)", "(Plato 3)", "(Plato 3)", "(Plato 3)", "(Plato 3)"],
-        ["", "OPCI\xD3N 4", "(Plato 4)", "(Plato 4)", "(Plato 4)", "(Plato 4)", "(Plato 4)"],
-        ["", "OPCI\xD3N 5", "(Plato 5)", "(Plato 5)", "(Plato 5)", "(Plato 5)", "(Plato 5)"]
+        ["1.", "Complete las minutas en la hoja correspondiente a cada casino."],
+        ["2.", "Cada semana tiene 5 columnas (Lunes a Viernes) y hasta 5 opciones de men\xFA por d\xEDa."],
+        ["3.", "La fila FECHA contiene las fechas en formato AAAA-MM-DD. No modificar el formato."],
+        ["4.", "Las opciones 4 y 5 son opcionales (dejar en blanco si no aplica)."],
+        ["5.", "Para importar, suba este archivo en el panel de administraci\xF3n > Carga Masiva."],
+        ["6.", "La secci\xF3n CONSOLIDACI\xD3N se llena autom\xE1ticamente con los datos de inscripci\xF3n."],
+        [],
+        ["IMPORTANTE:", "No modificar la estructura de las hojas ni las filas de FECHA / ID Casino."]
       ];
-      const wsInst = XLSX.utils.aoa_to_sheet(instrucciones);
-      wsInst["!cols"] = [{ wch: 18 }, { wch: 14 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }];
+      const wsInst = XLSX.utils.aoa_to_sheet(instData);
+      wsInst["!cols"] = [{ wch: 20 }, { wch: 70 }];
+      wsInst["!rows"] = [{ hpt: 36 }, { hpt: 24 }];
+      setCellStyle(wsInst, "A1", { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
+      setCellStyle(wsInst, "B1", { font: XS.fontTitle, fill: XS.darkFill });
+      setCellStyle(wsInst, "A2", { font: { ...XS.fontSmall, color: { rgb: "D4A843" } }, fill: XS.navyFill, alignment: XS.center });
+      setCellStyle(wsInst, "B2", { fill: XS.navyFill });
+      wsInst["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } }];
+      setCellStyle(wsInst, "A4", { font: XS.fontSubtitle, fill: XS.goldLightFill, border: XS.borderBottom });
+      setCellStyle(wsInst, "B4", { fill: XS.goldLightFill, border: XS.borderBottom });
+      for (let r = 5; r <= 10; r++) {
+        setCellStyle(wsInst, `A${r + 1}`, { font: XS.fontGold, alignment: XS.right });
+        setCellStyle(wsInst, `B${r + 1}`, { font: XS.fontNormal, alignment: XS.left });
+      }
+      setCellStyle(wsInst, "A13", { font: XS.fontBoldDark, fill: { fgColor: { rgb: "FFCDD2" } }, border: XS.borderThin });
+      setCellStyle(wsInst, "B13", { font: XS.fontNormal, fill: { fgColor: { rgb: "FFCDD2" } }, border: XS.borderThin });
       XLSX.utils.book_append_sheet(wb, wsInst, "Instrucciones");
       const today = /* @__PURE__ */ new Date();
       const monday = new Date(today);
       monday.setDate(today.getDate() - today.getDay() + 1);
+      const optColors = [
+        { fgColor: { rgb: "E3F2FD" } },
+        { fgColor: { rgb: "E8F5E9" } },
+        { fgColor: { rgb: "FFF3E0" } },
+        { fgColor: { rgb: "F3E5F5" } },
+        { fgColor: { rgb: "FFEBEE" } }
+      ];
       for (const casino of casinosList) {
         const sheetData = [];
-        sheetData.push(["PLANIFICACI\xD3N SEMANAL DE MINUTAS"]);
-        sheetData.push(["Casino:", casino.nombre]);
-        sheetData.push(["Direcci\xF3n:", casino.direccion || ""]);
-        sheetData.push(["ID Casino:", casino.id]);
+        sheetData.push(["PLANIFICACI\xD3N SEMANAL DE MINUTAS", "", "", "", "", "", ""]);
+        sheetData.push(["Casino:", casino.nombre, "", "Per\xEDodo:", "", "", ""]);
+        sheetData.push(["Direcci\xF3n:", casino.direccion || "\u2014", "", "", "", "", ""]);
+        sheetData.push(["ID Casino:", casino.id, "", "", "", "", ""]);
         sheetData.push([]);
+        const weekStartRows = [];
         for (let week = 0; week < 4; week++) {
           const weekStart = new Date(monday);
           weekStart.setDate(monday.getDate() + week * 7);
@@ -880,10 +992,13 @@ async function registerRoutes(app2) {
             dates.push(day.toISOString().split("T")[0]);
             dateLabels.push(`${DIAS[d]} ${day.getDate()}/${day.getMonth() + 1}`);
           }
-          const weekNum = week + 1;
-          sheetData.push(["", "", ...dateLabels]);
+          const baseRow = sheetData.length;
+          weekStartRows.push(baseRow);
+          const weekLabel = `SEMANA ${week + 1}`;
+          const weekRange = `${dates[0]} al ${dates[4]}`;
+          sheetData.push([weekLabel, weekRange, ...dateLabels]);
           sheetData.push(["", "FECHA", ...dates]);
-          sheetData.push([`SEMANA ${weekNum}`, "OPCI\xD3N 1", "", "", "", "", ""]);
+          sheetData.push(["", "OPCI\xD3N 1", "", "", "", "", ""]);
           sheetData.push(["", "OPCI\xD3N 2", "", "", "", "", ""]);
           sheetData.push(["", "OPCI\xD3N 3", "", "", "", "", ""]);
           sheetData.push(["", "OPCI\xD3N 4", "", "", "", "", ""]);
@@ -897,12 +1012,61 @@ async function registerRoutes(app2) {
           sheetData.push(["", "Inscritos Op.5", 0, 0, 0, 0, 0]);
           sheetData.push(["", "Sin inscripci\xF3n", "", "", "", "", ""]);
           sheetData.push(["", "Visitas", "", "", "", "", ""]);
-          sheetData.push(["", "TOTAL", 0, 0, 0, 0, 0]);
+          sheetData.push(["", "TOTAL COMENSALES", 0, 0, 0, 0, 0]);
           sheetData.push([]);
           sheetData.push([]);
         }
         const ws = XLSX.utils.aoa_to_sheet(sheetData);
-        ws["!cols"] = [{ wch: 16 }, { wch: 16 }, { wch: 32 }, { wch: 32 }, { wch: 32 }, { wch: 32 }, { wch: 32 }];
+        ws["!cols"] = [{ wch: 20 }, { wch: 18 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }, { wch: 30 }];
+        ws["!rows"] = [{ hpt: 32 }, { hpt: 22 }, { hpt: 18 }, { hpt: 18 }];
+        styleRange(ws, 0, 0, 0, 6, { font: XS.fontTitle, fill: XS.darkFill, alignment: XS.center });
+        ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }];
+        setCellStyle(ws, "A2", { font: XS.fontGold });
+        setCellStyle(ws, "B2", { font: XS.fontBoldDark });
+        setCellStyle(ws, "D2", { font: XS.fontGold });
+        setCellStyle(ws, "A3", { font: XS.fontSmall });
+        setCellStyle(ws, "B3", { font: XS.fontSmall });
+        setCellStyle(ws, "A4", { font: { ...XS.fontSmall, sz: 8 } });
+        setCellStyle(ws, "B4", { font: { ...XS.fontSmall, sz: 8 } });
+        for (const baseRow of weekStartRows) {
+          for (let c = 0; c <= 6; c++) {
+            const ref = XLSX.utils.encode_cell({ r: baseRow, c });
+            setCellStyle(ws, ref, { font: XS.fontHeader, fill: XS.headerBlueFill, alignment: XS.center, border: XS.borderMedium });
+          }
+          for (let c = 0; c <= 6; c++) {
+            const ref = XLSX.utils.encode_cell({ r: baseRow + 1, c });
+            setCellStyle(ws, ref, { font: { ...XS.fontSmall, bold: true, color: { rgb: "0F3460" } }, fill: XS.goldLightFill, alignment: XS.center, border: XS.borderThin });
+          }
+          for (let opt = 0; opt < 5; opt++) {
+            const row = baseRow + 2 + opt;
+            setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c: 0 }), { font: XS.fontSmall, fill: optColors[opt], border: XS.borderThin });
+            setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c: 1 }), { font: XS.fontGold, fill: optColors[opt], alignment: XS.left, border: XS.borderThin });
+            for (let c = 2; c <= 6; c++) {
+              setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c }), { font: XS.fontNormal, fill: XS.whiteFill, alignment: XS.left, border: XS.borderThin });
+            }
+          }
+          const consRow = baseRow + 8;
+          for (let c = 0; c <= 6; c++) {
+            setCellStyle(ws, XLSX.utils.encode_cell({ r: consRow, c }), { font: { ...XS.fontHeader, color: { rgb: "B8902E" } }, fill: XS.goldLightFill, alignment: XS.center, border: XS.borderThin });
+          }
+          for (let i = 0; i < 5; i++) {
+            const row = consRow + 1 + i;
+            setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c: 1 }), { font: XS.fontSmall, fill: optColors[i], alignment: XS.left, border: XS.borderThin });
+            for (let c = 2; c <= 6; c++) {
+              setCellStyle(ws, XLSX.utils.encode_cell({ r: row, c }), { font: XS.fontNormal, fill: optColors[i], alignment: XS.center, border: XS.borderThin });
+            }
+          }
+          for (let extraRow = consRow + 6; extraRow <= consRow + 7; extraRow++) {
+            setCellStyle(ws, XLSX.utils.encode_cell({ r: extraRow, c: 1 }), { font: XS.fontSmall, fill: XS.lightGrayFill, alignment: XS.left, border: XS.borderThin });
+            for (let c = 2; c <= 6; c++) {
+              setCellStyle(ws, XLSX.utils.encode_cell({ r: extraRow, c }), { font: XS.fontNormal, fill: XS.lightGrayFill, alignment: XS.center, border: XS.borderThin });
+            }
+          }
+          const totalRow = consRow + 8;
+          for (let c = 0; c <= 6; c++) {
+            setCellStyle(ws, XLSX.utils.encode_cell({ r: totalRow, c }), { font: XS.fontHeader, fill: XS.darkFill, alignment: XS.center, border: XS.borderMedium });
+          }
+        }
         const safeSheetName = casino.nombre.substring(0, 28).replace(/[\\\/\?\*\[\]]/g, "");
         XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
       }

@@ -1433,6 +1433,7 @@ function configureExpoAndLanding(app2) {
     next();
   });
   app2.use("/assets", express.static(path2.resolve(process.cwd(), "assets")));
+  app2.use(express.static(path2.resolve(process.cwd(), "public")));
   app2.use(express.static(path2.resolve(process.cwd(), "static-build")));
   log("Expo routing: Checking expo-platform header on / and /manifest");
 }

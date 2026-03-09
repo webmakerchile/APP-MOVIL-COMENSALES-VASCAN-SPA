@@ -22,10 +22,12 @@ interface Minuta {
   id: string;
   casinoId: string;
   fecha: string;
+  familia: string;
   opcion1: string;
   opcion2: string;
   opcion3: string;
   opcion4: string | null;
+  opcion5: string | null;
 }
 
 const DAYS_ES = [
@@ -125,6 +127,9 @@ export default function MinutaDetailScreen() {
     ];
     if (minuta.opcion4) {
       options.push({ number: 4, text: minuta.opcion4 });
+    }
+    if (minuta.opcion5) {
+      options.push({ number: 5, text: minuta.opcion5 });
     }
     return options;
   }

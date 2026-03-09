@@ -571,16 +571,38 @@
     }
 
     // ── Minutas CRUD ──
+    const FAMILIA_OPTIONS = [
+      { value: 'almuerzo', label: 'Almuerzo' },
+      { value: 'desayuno', label: 'Desayuno' },
+      { value: 'colacion', label: 'Colación' },
+      { value: 'almuerzo_fds', label: 'Almuerzo Fin de Semana' },
+      { value: 'cena', label: 'Cena' },
+      { value: 'once', label: 'Once' },
+    ];
+    const FAMILIA_COLORS = {
+      almuerzo: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      desayuno: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+      colacion: 'bg-green-500/20 text-green-300 border-green-500/30',
+      almuerzo_fds: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+      cena: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+      once: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+    };
+    function getFamiliaLabel(val) { return FAMILIA_OPTIONS.find(f => f.value === val)?.label || val; }
+
     function MinutasView() {
       const [casinos, setCasinos] = useState([]);
       const [selectedCasino, setSelectedCasino] = useState('');
+      const [filterFamilia, setFilterFamilia] = useState('');
       const [minutasList, setMinutasList] = useState([]);
       const [loading, setLoading] = useState(true);
       const [showModal, setShowModal] = useState(false);
+      const [showCloneModal, setShowCloneModal] = useState(false);
+      const [cloneSource, setCloneSource] = useState(null);
+      const [cloneForm, setCloneForm] = useState({ fecha: '', casinoIds: [] });
       const [editItem, setEditItem] = useState(null);
       const [deleteTarget, setDeleteTarget] = useState(null);
       const [toast, setToast] = useState(null);
-      const [form, setForm] = useState({ fecha: '', opcion1: '', opcion2: '', opcion3: '', opcion4: '' });
+      const [form, setForm] = useState({ fecha: '', familia: 'almuerzo', opcion1: '', opcion2: '', opcion3: '', opcion4: '', opcion5: '', casinoIds: [] });
 
       useEffect(() => {
         apiFetch('/api/casinos').then(data => {
@@ -606,28 +628,62 @@
 
       function openCreate() {
         setEditItem(null);
-        setForm({ fecha: new Date().toISOString().split('T')[0], opcion1: '', opcion2: '', opcion3: '', opcion4: '' });
+        setForm({ fecha: new Date().toISOString().split('T')[0], familia: 'almuerzo', opcion1: '', opcion2: '', opcion3: '', opcion4: '', opcion5: '', casinoIds: [selectedCasino] });
         setShowModal(true);
       }
 
       function openEdit(m) {
         setEditItem(m);
-        setForm({ fecha: m.fecha, opcion1: m.opcion1, opcion2: m.opcion2, opcion3: m.opcion3, opcion4: m.opcion4 || '' });
+        setForm({ fecha: m.fecha, familia: m.familia || 'almuerzo', opcion1: m.opcion1, opcion2: m.opcion2, opcion3: m.opcion3, opcion4: m.opcion4 || '', opcion5: m.opcion5 || '', casinoIds: [m.casinoId] });
         setShowModal(true);
+      }
+
+      function openClone(m) {
+        setCloneSource(m);
+        setCloneForm({ fecha: '', casinoIds: [m.casinoId] });
+        setShowCloneModal(true);
+      }
+
+      function toggleCasinoInList(list, id) {
+        return list.includes(id) ? list.filter(x => x !== id) : [...list, id];
       }
 
       async function handleSave(e) {
         e.preventDefault();
         try {
-          const body = { ...form, casinoId: selectedCasino, opcion4: form.opcion4 || null };
           if (editItem) {
+            const body = { ...form, casinoId: editItem.casinoId, opcion4: form.opcion4 || null, opcion5: form.opcion5 || null };
+            delete body.casinoIds;
             await apiFetch(`/api/minutas/${editItem.id}`, { method: 'PUT', body: JSON.stringify(body) });
             setToast({ message: 'Minuta actualizada', type: 'success' });
           } else {
+            if (form.casinoIds.length === 0) {
+              setToast({ message: 'Seleccione al menos un casino', type: 'error' });
+              return;
+            }
+            const body = { ...form, opcion4: form.opcion4 || null, opcion5: form.opcion5 || null };
             await apiFetch('/api/minutas', { method: 'POST', body: JSON.stringify(body) });
-            setToast({ message: 'Minuta creada', type: 'success' });
+            setToast({ message: `Minuta creada en ${form.casinoIds.length} casino(s)`, type: 'success' });
           }
           setShowModal(false);
+          loadMinutas(selectedCasino);
+        } catch (err) {
+          setToast({ message: err.message, type: 'error' });
+        }
+      }
+
+      async function handleClone(e) {
+        e.preventDefault();
+        if (!cloneSource) return;
+        if (cloneForm.casinoIds.length === 0) {
+          setToast({ message: 'Seleccione al menos un casino destino', type: 'error' });
+          return;
+        }
+        try {
+          const body = { fecha: cloneForm.fecha || null, casinoIds: cloneForm.casinoIds };
+          await apiFetch(`/api/minutas/${cloneSource.id}/clonar`, { method: 'POST', body: JSON.stringify(body) });
+          setToast({ message: `Minuta clonada en ${cloneForm.casinoIds.length} casino(s)`, type: 'success' });
+          setShowCloneModal(false);
           loadMinutas(selectedCasino);
         } catch (err) {
           setToast({ message: err.message, type: 'error' });
@@ -646,6 +702,7 @@
       }
 
       const DAYS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+      const filtered = filterFamilia ? minutasList.filter(m => (m.familia || 'almuerzo') === filterFamilia) : minutasList;
 
       if (loading && casinos.length === 0) return <LoadingSpinner />;
 
@@ -662,43 +719,58 @@
           </div>
 
           <div className="bg-vascan-surface rounded-2xl border border-white/10 p-4 mb-6">
-            <select value={selectedCasino} onChange={e => handleCasinoChange(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
-              {casinos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <select value={selectedCasino} onChange={e => handleCasinoChange(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
+                {casinos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+              <select value={filterFamilia} onChange={e => setFilterFamilia(e.target.value)}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
+                <option value="">Todas las familias</option>
+                {FAMILIA_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+              </select>
+            </div>
           </div>
 
           {loading ? <LoadingSpinner /> : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {minutasList.map(m => {
+              {filtered.map(m => {
                 const d = new Date(m.fecha + 'T12:00:00');
+                const fam = m.familia || 'almuerzo';
                 return (
                   <div key={m.id} className="bg-vascan-surface rounded-2xl border border-white/10 p-5">
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-2">
                       <div>
                         <p className="text-vascan-gold font-semibold">{DAYS[d.getDay()]} {d.getDate()}</p>
                         <p className="text-white/40 text-xs">{m.fecha}</p>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button onClick={() => openEdit(m)} className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition">
+                        <button onClick={() => openClone(m)} title="Clonar" className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-green-400 transition">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                        </button>
+                        <button onClick={() => openEdit(m)} title="Editar" className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                         </button>
-                        <button onClick={() => setDeleteTarget(m)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-white/40 hover:text-red-400 transition">
+                        <button onClick={() => setDeleteTarget(m)} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-500/10 text-white/40 hover:text-red-400 transition">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       </div>
                     </div>
+                    <span className={`inline-block text-xs font-medium px-2.5 py-0.5 rounded-full border mb-3 ${FAMILIA_COLORS[fam] || 'bg-white/10 text-white/60 border-white/20'}`}>
+                      {getFamiliaLabel(fam)}
+                    </span>
                     <div className="space-y-2 text-sm">
                       <div className="flex gap-2"><span className="text-vascan-gold font-semibold min-w-[20px]">1.</span><span className="text-white/70">{m.opcion1}</span></div>
                       <div className="flex gap-2"><span className="text-vascan-gold font-semibold min-w-[20px]">2.</span><span className="text-white/70">{m.opcion2}</span></div>
                       <div className="flex gap-2"><span className="text-vascan-gold font-semibold min-w-[20px]">3.</span><span className="text-white/70">{m.opcion3}</span></div>
                       {m.opcion4 && <div className="flex gap-2"><span className="text-vascan-gold font-semibold min-w-[20px]">4.</span><span className="text-white/70">{m.opcion4}</span></div>}
+                      {m.opcion5 && <div className="flex gap-2"><span className="text-vascan-gold font-semibold min-w-[20px]">5.</span><span className="text-white/70">{m.opcion5}</span></div>}
                     </div>
                   </div>
                 );
               })}
-              {minutasList.length === 0 && (
-                <div className="col-span-full text-center py-12 text-white/40">No hay minutas para este casino</div>
+              {filtered.length === 0 && (
+                <div className="col-span-full text-center py-12 text-white/40">No hay minutas para este filtro</div>
               )}
             </div>
           )}
@@ -706,14 +778,68 @@
           <Modal open={showModal} onClose={() => setShowModal(false)} title={editItem ? 'Editar Minuta' : 'Nueva Minuta'}>
             <form onSubmit={handleSave} className="space-y-4">
               <InputField label="Fecha" value={form.fecha} onChange={v => setForm({...form, fecha: v})} type="date" required />
+              <div>
+                <label className="block text-sm font-medium text-white/60 mb-1.5">Familia</label>
+                <select value={form.familia} onChange={e => setForm({...form, familia: e.target.value})}
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
+                  {FAMILIA_OPTIONS.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+              </div>
+              {!editItem && (
+                <div>
+                  <label className="block text-sm font-medium text-white/60 mb-1.5">Casinos (seleccione uno o más)</label>
+                  <div className="space-y-2 max-h-36 overflow-y-auto bg-white/5 rounded-xl p-3 border border-white/10">
+                    {casinos.map(c => (
+                      <label key={c.id} className="flex items-center gap-3 cursor-pointer hover:bg-white/5 rounded-lg px-2 py-1.5 transition">
+                        <input type="checkbox" checked={form.casinoIds.includes(c.id)}
+                          onChange={() => setForm({...form, casinoIds: toggleCasinoInList(form.casinoIds, c.id)})}
+                          className="w-4 h-4 rounded accent-amber-500" />
+                        <span className="text-sm text-white/80">{c.nombre}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <InputField label="Opción 1" value={form.opcion1} onChange={v => setForm({...form, opcion1: v})} placeholder="Ej: Pollo al horno con arroz" required />
               <InputField label="Opción 2" value={form.opcion2} onChange={v => setForm({...form, opcion2: v})} placeholder="Ej: Pescado frito con puré" required />
               <InputField label="Opción 3" value={form.opcion3} onChange={v => setForm({...form, opcion3: v})} placeholder="Ej: Pasta boloñesa" required />
               <InputField label="Opción 4 (opcional)" value={form.opcion4} onChange={v => setForm({...form, opcion4: v})} placeholder="Ej: Ensalada César" />
+              <InputField label="Opción 5 (opcional)" value={form.opcion5} onChange={v => setForm({...form, opcion5: v})} placeholder="Ej: Menú vegetariano" />
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-medium transition">Cancelar</button>
                 <button type="submit" className="px-5 py-2.5 rounded-xl bg-vascan-gold hover:bg-vascan-goldDark text-sm font-medium transition">
                   {editItem ? 'Guardar Cambios' : 'Crear Minuta'}
+                </button>
+              </div>
+            </form>
+          </Modal>
+
+          <Modal open={showCloneModal} onClose={() => setShowCloneModal(false)} title="Clonar Minuta">
+            <form onSubmit={handleClone} className="space-y-4">
+              {cloneSource && (
+                <div className="bg-white/5 rounded-xl p-3 border border-white/10 text-sm">
+                  <p className="text-white/60 mb-1">Clonando minuta de: <span className="text-white font-medium">{cloneSource.fecha}</span></p>
+                  <p className="text-white/60">Familia: <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border ${FAMILIA_COLORS[cloneSource.familia || 'almuerzo'] || ''}`}>{getFamiliaLabel(cloneSource.familia || 'almuerzo')}</span></p>
+                </div>
+              )}
+              <InputField label="Nueva fecha (dejar vacío para mantener)" value={cloneForm.fecha} onChange={v => setCloneForm({...cloneForm, fecha: v})} type="date" />
+              <div>
+                <label className="block text-sm font-medium text-white/60 mb-1.5">Casinos destino</label>
+                <div className="space-y-2 max-h-36 overflow-y-auto bg-white/5 rounded-xl p-3 border border-white/10">
+                  {casinos.map(c => (
+                    <label key={c.id} className="flex items-center gap-3 cursor-pointer hover:bg-white/5 rounded-lg px-2 py-1.5 transition">
+                      <input type="checkbox" checked={cloneForm.casinoIds.includes(c.id)}
+                        onChange={() => setCloneForm({...cloneForm, casinoIds: toggleCasinoInList(cloneForm.casinoIds, c.id)})}
+                        className="w-4 h-4 rounded accent-amber-500" />
+                      <span className="text-sm text-white/80">{c.nombre}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setShowCloneModal(false)} className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-medium transition">Cancelar</button>
+                <button type="submit" className="px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-sm font-medium transition">
+                  Clonar Minuta
                 </button>
               </div>
             </form>

@@ -436,12 +436,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/minutas", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const parsed = insertMinutaSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Datos inválidos", errors: parsed.error.errors });
+      const { casinoIds, ...rest } = req.body;
+      const targetIds: string[] = casinoIds && Array.isArray(casinoIds) && casinoIds.length > 0
+        ? casinoIds
+        : rest.casinoId ? [rest.casinoId] : [];
+
+      if (targetIds.length === 0) {
+        return res.status(400).json({ message: "Debe seleccionar al menos un casino" });
       }
-      const minuta = await storage.createMinuta(parsed.data);
-      return res.status(201).json(minuta);
+
+      const created: any[] = [];
+      for (const cid of targetIds) {
+        const data = { ...rest, casinoId: cid };
+        const parsed = insertMinutaSchema.safeParse(data);
+        if (!parsed.success) {
+          return res.status(400).json({ message: "Datos inválidos", errors: parsed.error.errors });
+        }
+        const minuta = await storage.createMinuta(parsed.data);
+        created.push(minuta);
+      }
+      return res.status(201).json(created.length === 1 ? created[0] : created);
     } catch (error) {
       console.error("Create minuta error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
@@ -451,14 +465,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/minutas/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { casinoId, fecha, opcion1, opcion2, opcion3, opcion4, activo } = req.body;
+      const { casinoId, fecha, familia, opcion1, opcion2, opcion3, opcion4, opcion5, activo } = req.body;
       const updateData: any = {};
       if (casinoId !== undefined) updateData.casinoId = casinoId;
       if (fecha !== undefined) updateData.fecha = fecha;
+      if (familia !== undefined) updateData.familia = familia;
       if (opcion1 !== undefined) updateData.opcion1 = opcion1;
       if (opcion2 !== undefined) updateData.opcion2 = opcion2;
       if (opcion3 !== undefined) updateData.opcion3 = opcion3;
       if (opcion4 !== undefined) updateData.opcion4 = opcion4;
+      if (opcion5 !== undefined) updateData.opcion5 = opcion5;
       if (activo !== undefined) updateData.activo = activo;
 
       const minuta = await storage.updateMinuta(id, updateData);
@@ -483,6 +499,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Delete minuta error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  app.post("/api/minutas/:id/clonar", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { fecha, casinoIds } = req.body;
+      const original = await storage.getMinuta(id);
+      if (!original) {
+        return res.status(404).json({ message: "Minuta original no encontrada" });
+      }
+      const targetDate = fecha || original.fecha;
+      const targetCasinos: string[] = casinoIds && Array.isArray(casinoIds) && casinoIds.length > 0
+        ? casinoIds
+        : [original.casinoId];
+
+      const created: any[] = [];
+      for (const cid of targetCasinos) {
+        const cloneData: any = {
+          casinoId: cid,
+          fecha: targetDate,
+          familia: original.familia,
+          opcion1: original.opcion1,
+          opcion2: original.opcion2,
+          opcion3: original.opcion3,
+          opcion4: original.opcion4,
+          opcion5: original.opcion5,
+        };
+        const minuta = await storage.createMinuta(cloneData);
+        created.push(minuta);
+      }
+      return res.status(201).json(created.length === 1 ? created[0] : created);
+    } catch (error) {
+      console.error("Clone minuta error:", error);
+      return res.status(500).json({ message: "Error al clonar minuta" });
     }
   });
 
@@ -566,14 +617,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalPedidos = pedidosForMinuta.length;
 
       const opciones = [];
-      const optionTexts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4].filter(Boolean);
+      const allOptions: (string | null)[] = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5];
 
-      for (let i = 0; i < optionTexts.length; i++) {
+      for (let i = 0; i < allOptions.length; i++) {
+        if (!allOptions[i]) continue;
         const num = i + 1;
         const count = pedidosForMinuta.filter((p) => p.opcionSeleccionada === num).length;
         opciones.push({
           numero: num,
-          descripcion: optionTexts[i],
+          descripcion: allOptions[i],
           cantidad: count,
           porcentaje: totalPedidos > 0 ? Math.round((count / totalPedidos) * 100) : 0,
         });
@@ -582,7 +634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.json({
         casinoNombre: casino.nombre,
         fecha,
-        minuta: { id: minuta.id, opcion1: minuta.opcion1, opcion2: minuta.opcion2, opcion3: minuta.opcion3, opcion4: minuta.opcion4 },
+        minuta: { id: minuta.id, familia: minuta.familia, opcion1: minuta.opcion1, opcion2: minuta.opcion2, opcion3: minuta.opcion3, opcion4: minuta.opcion4, opcion5: minuta.opcion5 },
         opciones,
         totalPedidos,
       });
@@ -1150,6 +1202,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 opcion2: opciones[1],
                 opcion3: opciones[2],
                 opcion4: opciones[3] || null,
+                opcion5: opciones[4] || null,
               });
               created++;
             } catch (err: any) {

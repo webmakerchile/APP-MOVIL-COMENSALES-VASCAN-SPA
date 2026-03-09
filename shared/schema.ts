@@ -50,10 +50,12 @@ export const minutas = pgTable("minutas", {
     .notNull()
     .references(() => casinos.id),
   fecha: date("fecha").notNull(),
+  familia: text("familia").notNull().default("almuerzo"),
   opcion1: text("opcion_1").notNull(),
   opcion2: text("opcion_2").notNull(),
   opcion3: text("opcion_3").notNull(),
   opcion4: text("opcion_4"),
+  opcion5: text("opcion_5"),
   activo: boolean("activo").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -112,10 +114,12 @@ export const insertCasinoSchema = createInsertSchema(casinos).pick({
 export const insertMinutaSchema = createInsertSchema(minutas).pick({
   casinoId: true,
   fecha: true,
+  familia: true,
   opcion1: true,
   opcion2: true,
   opcion3: true,
   opcion4: true,
+  opcion5: true,
 });
 
 export const insertPedidoSchema = createInsertSchema(pedidos).pick({

@@ -81,10 +81,12 @@ var minutas = pgTable("minutas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   casinoId: varchar("casino_id").notNull().references(() => casinos.id),
   fecha: date("fecha").notNull(),
+  familia: text("familia").notNull().default("almuerzo"),
   opcion1: text("opcion_1").notNull(),
   opcion2: text("opcion_2").notNull(),
   opcion3: text("opcion_3").notNull(),
   opcion4: text("opcion_4"),
+  opcion5: text("opcion_5"),
   activo: boolean("activo").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow()
 });
@@ -125,10 +127,12 @@ var insertCasinoSchema = createInsertSchema(casinos).pick({
 var insertMinutaSchema = createInsertSchema(minutas).pick({
   casinoId: true,
   fecha: true,
+  familia: true,
   opcion1: true,
   opcion2: true,
   opcion3: true,
-  opcion4: true
+  opcion4: true,
+  opcion5: true
 });
 var insertPedidoSchema = createInsertSchema(pedidos).pick({
   userId: true,
@@ -611,12 +615,22 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/minutas", requireAdmin, async (req, res) => {
     try {
-      const parsed = insertMinutaSchema.safeParse(req.body);
-      if (!parsed.success) {
-        return res.status(400).json({ message: "Datos inv\xE1lidos", errors: parsed.error.errors });
+      const { casinoIds, ...rest } = req.body;
+      const targetIds = casinoIds && Array.isArray(casinoIds) && casinoIds.length > 0 ? casinoIds : rest.casinoId ? [rest.casinoId] : [];
+      if (targetIds.length === 0) {
+        return res.status(400).json({ message: "Debe seleccionar al menos un casino" });
       }
-      const minuta = await storage.createMinuta(parsed.data);
-      return res.status(201).json(minuta);
+      const created = [];
+      for (const cid of targetIds) {
+        const data = { ...rest, casinoId: cid };
+        const parsed = insertMinutaSchema.safeParse(data);
+        if (!parsed.success) {
+          return res.status(400).json({ message: "Datos inv\xE1lidos", errors: parsed.error.errors });
+        }
+        const minuta = await storage.createMinuta(parsed.data);
+        created.push(minuta);
+      }
+      return res.status(201).json(created.length === 1 ? created[0] : created);
     } catch (error) {
       console.error("Create minuta error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
@@ -625,14 +639,16 @@ async function registerRoutes(app2) {
   app2.put("/api/minutas/:id", requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const { casinoId, fecha, opcion1, opcion2, opcion3, opcion4, activo } = req.body;
+      const { casinoId, fecha, familia, opcion1, opcion2, opcion3, opcion4, opcion5, activo } = req.body;
       const updateData = {};
       if (casinoId !== void 0) updateData.casinoId = casinoId;
       if (fecha !== void 0) updateData.fecha = fecha;
+      if (familia !== void 0) updateData.familia = familia;
       if (opcion1 !== void 0) updateData.opcion1 = opcion1;
       if (opcion2 !== void 0) updateData.opcion2 = opcion2;
       if (opcion3 !== void 0) updateData.opcion3 = opcion3;
       if (opcion4 !== void 0) updateData.opcion4 = opcion4;
+      if (opcion5 !== void 0) updateData.opcion5 = opcion5;
       if (activo !== void 0) updateData.activo = activo;
       const minuta = await storage.updateMinuta(id, updateData);
       if (!minuta) {
@@ -655,6 +671,37 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Delete minuta error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+  app2.post("/api/minutas/:id/clonar", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { fecha, casinoIds } = req.body;
+      const original = await storage.getMinuta(id);
+      if (!original) {
+        return res.status(404).json({ message: "Minuta original no encontrada" });
+      }
+      const targetDate = fecha || original.fecha;
+      const targetCasinos = casinoIds && Array.isArray(casinoIds) && casinoIds.length > 0 ? casinoIds : [original.casinoId];
+      const created = [];
+      for (const cid of targetCasinos) {
+        const cloneData = {
+          casinoId: cid,
+          fecha: targetDate,
+          familia: original.familia,
+          opcion1: original.opcion1,
+          opcion2: original.opcion2,
+          opcion3: original.opcion3,
+          opcion4: original.opcion4,
+          opcion5: original.opcion5
+        };
+        const minuta = await storage.createMinuta(cloneData);
+        created.push(minuta);
+      }
+      return res.status(201).json(created.length === 1 ? created[0] : created);
+    } catch (error) {
+      console.error("Clone minuta error:", error);
+      return res.status(500).json({ message: "Error al clonar minuta" });
     }
   });
   app2.get("/api/pedidos/:userId", async (req, res) => {
@@ -722,7 +769,7 @@ async function registerRoutes(app2) {
       const pedidosForMinuta = await storage.getPedidosByMinuta(minuta.id);
       const totalPedidos = pedidosForMinuta.length;
       const opciones = [];
-      const optionTexts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4].filter(Boolean);
+      const optionTexts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5].filter(Boolean);
       for (let i = 0; i < optionTexts.length; i++) {
         const num = i + 1;
         const count = pedidosForMinuta.filter((p) => p.opcionSeleccionada === num).length;
@@ -736,7 +783,7 @@ async function registerRoutes(app2) {
       return res.json({
         casinoNombre: casino.nombre,
         fecha,
-        minuta: { id: minuta.id, opcion1: minuta.opcion1, opcion2: minuta.opcion2, opcion3: minuta.opcion3, opcion4: minuta.opcion4 },
+        minuta: { id: minuta.id, familia: minuta.familia, opcion1: minuta.opcion1, opcion2: minuta.opcion2, opcion3: minuta.opcion3, opcion4: minuta.opcion4, opcion5: minuta.opcion5 },
         opciones,
         totalPedidos
       });
@@ -1256,7 +1303,8 @@ async function registerRoutes(app2) {
                 opcion1: opciones[0],
                 opcion2: opciones[1],
                 opcion3: opciones[2],
-                opcion4: opciones[3] || null
+                opcion4: opciones[3] || null,
+                opcion5: opciones[4] || null
               });
               created++;
             } catch (err) {

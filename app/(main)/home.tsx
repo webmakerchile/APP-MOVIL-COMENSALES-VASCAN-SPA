@@ -24,12 +24,31 @@ interface Minuta {
   id: string;
   casinoId: string;
   fecha: string;
+  familia: string;
   opcion1: string;
   opcion2: string;
   opcion3: string;
   opcion4: string | null;
+  opcion5: string | null;
   activo: boolean;
 }
+
+const FAMILIA_LABELS: Record<string, string> = {
+  almuerzo: "Almuerzo",
+  desayuno: "Desayuno",
+  colacion: "Colación",
+  almuerzo_fds: "Almuerzo Fin de Semana",
+  cena: "Cena",
+  once: "Once",
+};
+const FAMILIA_COLORS: Record<string, string> = {
+  almuerzo: "#D4A843",
+  desayuno: "#38BDF8",
+  colacion: "#4ADE80",
+  almuerzo_fds: "#A78BFA",
+  cena: "#818CF8",
+  once: "#FB7185",
+};
 
 const DAYS_ES = [
   "Domingo",
@@ -76,7 +95,10 @@ function isToday(dateStr: string) {
 function MinutaCard({ item }: { item: Minuta }) {
   const dateInfo = formatDateLabel(item.fecha);
   const today = isToday(item.fecha);
-  const optionCount = item.opcion4 ? 4 : 3;
+  const fam = item.familia || "almuerzo";
+  let optionCount = 3;
+  if (item.opcion4) optionCount = 4;
+  if (item.opcion5) optionCount = 5;
 
   function handlePress() {
     if (Platform.OS !== "web") {
@@ -110,6 +132,11 @@ function MinutaCard({ item }: { item: Minuta }) {
       </View>
       <View style={styles.menuContent}>
         <View style={styles.menuHeader}>
+          <View style={[styles.familiaBadge, { backgroundColor: (FAMILIA_COLORS[fam] || Colors.primary) + "22" }]}>
+            <Text style={[styles.familiaBadgeText, { color: FAMILIA_COLORS[fam] || Colors.primary }]}>
+              {FAMILIA_LABELS[fam] || fam}
+            </Text>
+          </View>
           {today ? (
             <View style={styles.todayBadge}>
               <Text style={styles.todayBadgeText}>HOY</Text>
@@ -122,6 +149,9 @@ function MinutaCard({ item }: { item: Minuta }) {
           <OptionPreview number={3} text={item.opcion3} />
           {item.opcion4 ? (
             <OptionPreview number={4} text={item.opcion4} />
+          ) : null}
+          {item.opcion5 ? (
+            <OptionPreview number={5} text={item.opcion5} />
           ) : null}
         </View>
         <View style={styles.menuFooter}>
@@ -378,6 +408,17 @@ const styles = StyleSheet.create({
   menuHeader: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
+  },
+  familiaBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  familiaBadgeText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 10,
+    letterSpacing: 0.5,
   },
   todayBadge: {
     backgroundColor: Colors.primary,

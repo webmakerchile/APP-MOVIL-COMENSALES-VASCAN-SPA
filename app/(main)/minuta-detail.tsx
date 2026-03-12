@@ -93,9 +93,12 @@ export default function MinutaDetailScreen() {
       }
     },
     onError: (error: any) => {
-      const msg = error.message?.includes("409")
-        ? "Ya seleccionaste una opción para esta fecha"
-        : "Error al registrar tu selección";
+      let msg = "Error al registrar tu selección";
+      if (error.message?.includes("409")) {
+        msg = "Ya seleccionaste una opción para esta fecha";
+      } else if (error.message?.includes("403")) {
+        msg = "La inscripción no está disponible en este momento. Fuera del horario de inscripción.";
+      }
       Alert.alert("Error", msg);
       if (Platform.OS !== "web") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

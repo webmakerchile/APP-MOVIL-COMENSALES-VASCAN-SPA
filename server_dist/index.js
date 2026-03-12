@@ -242,9 +242,24 @@ var DatabaseStorage = class {
   async getPeriodosByCasino(casinoId) {
     return db.select().from(periodos).where(eq(periodos.casinoId, casinoId));
   }
+  async getAllPeriodos() {
+    return db.select().from(periodos);
+  }
+  async getPeriodo(id) {
+    const [periodo] = await db.select().from(periodos).where(eq(periodos.id, id));
+    return periodo;
+  }
   async createPeriodo(insertPeriodo) {
     const [periodo] = await db.insert(periodos).values(insertPeriodo).returning();
     return periodo;
+  }
+  async updatePeriodo(id, data) {
+    const [periodo] = await db.update(periodos).set(data).where(eq(periodos.id, id)).returning();
+    return periodo;
+  }
+  async deletePeriodo(id) {
+    const [periodo] = await db.update(periodos).set({ activo: false }).where(eq(periodos.id, id)).returning();
+    return !!periodo;
   }
 };
 var storage = new DatabaseStorage();
@@ -704,6 +719,77 @@ async function registerRoutes(app2) {
       return res.status(500).json({ message: "Error al clonar minuta" });
     }
   });
+  app2.get("/api/periodos", requireAdmin, async (req, res) => {
+    try {
+      const allPeriodos = await storage.getAllPeriodos();
+      return res.json(allPeriodos);
+    } catch (error) {
+      console.error("Get periodos error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+  app2.get("/api/periodos/casino/:casinoId", async (req, res) => {
+    try {
+      const { casinoId } = req.params;
+      const periodosList = await storage.getPeriodosByCasino(casinoId);
+      return res.json(periodosList);
+    } catch (error) {
+      console.error("Get periodos by casino error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+  app2.post("/api/periodos", requireAdmin, async (req, res) => {
+    try {
+      const { casinoId, nombre, fechaInicio, fechaFin } = req.body;
+      if (!casinoId || !nombre || !fechaInicio || !fechaFin) {
+        return res.status(400).json({ message: "Todos los campos son obligatorios" });
+      }
+      if (new Date(fechaFin) <= new Date(fechaInicio)) {
+        return res.status(400).json({ message: "La fecha/hora de fin debe ser posterior a la de inicio" });
+      }
+      const periodo = await storage.createPeriodo({
+        casinoId,
+        nombre,
+        fechaInicio: new Date(fechaInicio),
+        fechaFin: new Date(fechaFin)
+      });
+      return res.status(201).json(periodo);
+    } catch (error) {
+      console.error("Create periodo error:", error);
+      return res.status(500).json({ message: "Error al crear periodo" });
+    }
+  });
+  app2.put("/api/periodos/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { nombre, fechaInicio, fechaFin, activo } = req.body;
+      const updateData = {};
+      if (nombre !== void 0) updateData.nombre = nombre;
+      if (fechaInicio !== void 0) updateData.fechaInicio = new Date(fechaInicio);
+      if (fechaFin !== void 0) updateData.fechaFin = new Date(fechaFin);
+      if (activo !== void 0) updateData.activo = activo;
+      if (updateData.fechaInicio && updateData.fechaFin && new Date(updateData.fechaFin) <= new Date(updateData.fechaInicio)) {
+        return res.status(400).json({ message: "La fecha/hora de fin debe ser posterior a la de inicio" });
+      }
+      const periodo = await storage.updatePeriodo(id, updateData);
+      if (!periodo) return res.status(404).json({ message: "Periodo no encontrado" });
+      return res.json(periodo);
+    } catch (error) {
+      console.error("Update periodo error:", error);
+      return res.status(500).json({ message: "Error al actualizar periodo" });
+    }
+  });
+  app2.delete("/api/periodos/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deletePeriodo(id);
+      if (!deleted) return res.status(404).json({ message: "Periodo no encontrado" });
+      return res.json({ message: "Periodo desactivado" });
+    } catch (error) {
+      console.error("Delete periodo error:", error);
+      return res.status(500).json({ message: "Error al eliminar periodo" });
+    }
+  });
   app2.get("/api/pedidos/:userId", async (req, res) => {
     try {
       const { userId } = req.params;
@@ -727,6 +813,12 @@ async function registerRoutes(app2) {
       const minuta = await storage.getMinuta(parsed.data.minutaId);
       if (!minuta) {
         return res.status(404).json({ message: "Minuta no encontrada" });
+      }
+      const casinoPeriodos = await storage.getPeriodosByCasino(minuta.casinoId);
+      const now = /* @__PURE__ */ new Date();
+      const activePeriodos = casinoPeriodos.filter((p) => p.activo && new Date(p.fechaInicio) <= now && new Date(p.fechaFin) >= now);
+      if (casinoPeriodos.filter((p) => p.activo).length > 0 && activePeriodos.length === 0) {
+        return res.status(403).json({ message: "La inscripci\xF3n no est\xE1 disponible en este momento. Fuera del horario de inscripci\xF3n." });
       }
       if (user.role === "comensal") {
         const existing = await storage.getPedidoByUserAndMinuta(parsed.data.userId, parsed.data.minutaId);
@@ -769,13 +861,14 @@ async function registerRoutes(app2) {
       const pedidosForMinuta = await storage.getPedidosByMinuta(minuta.id);
       const totalPedidos = pedidosForMinuta.length;
       const opciones = [];
-      const optionTexts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5].filter(Boolean);
-      for (let i = 0; i < optionTexts.length; i++) {
+      const allOptions = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5];
+      for (let i = 0; i < allOptions.length; i++) {
+        if (!allOptions[i]) continue;
         const num = i + 1;
         const count = pedidosForMinuta.filter((p) => p.opcionSeleccionada === num).length;
         opciones.push({
           numero: num,
-          descripcion: optionTexts[i],
+          descripcion: allOptions[i],
           cantidad: count,
           porcentaje: totalPedidos > 0 ? Math.round(count / totalPedidos * 100) : 0
         });

@@ -73,8 +73,15 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 - `DELETE /api/minutas/:id` - Soft-delete (deactivate) minuta
 - `POST /api/minutas/:id/clonar` - Clone minuta to new date/casinos
 
+### Periodos CRUD
+- `GET /api/periodos` - List all periodos (admin)
+- `GET /api/periodos/casino/:casinoId` - Get periodos for a casino
+- `POST /api/periodos` - Create periodo (admin)
+- `PUT /api/periodos/:id` - Update periodo (admin)
+- `DELETE /api/periodos/:id` - Soft-delete (deactivate) periodo
+
 ### Other
-- `POST /api/pedidos` - Create meal order
+- `POST /api/pedidos` - Create meal order (validates active periodo if any exist)
 - `GET /api/pedidos/:userId` - Get user's orders
 - `GET /api/reportes/consolidacion?casinoId=X&fecha=Y` - Consolidation report
 - `POST /api/usuarios/upload` - Bulk user upload from Excel

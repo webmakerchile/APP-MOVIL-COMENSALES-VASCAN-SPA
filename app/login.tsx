@@ -27,9 +27,29 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
 
   function formatRut(value: string) {
-    let cleaned = value.replace(/[^0-9kK-]/g, "");
-    if (cleaned.length > 12) cleaned = cleaned.slice(0, 12);
-    setRut(cleaned);
+    let cleaned = value.replace(/[^0-9kK]/g, "").toUpperCase();
+    if (cleaned.length > 9) cleaned = cleaned.slice(0, 9);
+
+    if (cleaned.length <= 1) {
+      setRut(cleaned);
+      return;
+    }
+
+    const body = cleaned.slice(0, -1);
+    const dv = cleaned.slice(-1);
+
+    let formatted = "";
+    const reversed = body.split("").reverse();
+    for (let i = 0; i < reversed.length; i++) {
+      if (i > 0 && i % 3 === 0) formatted = "." + formatted;
+      formatted = reversed[i] + formatted;
+    }
+    formatted = formatted + "-" + dv;
+    setRut(formatted);
+  }
+
+  function cleanRut(formattedRut: string): string {
+    return formattedRut.replace(/\./g, "");
   }
 
   async function handleLogin() {
@@ -45,7 +65,7 @@ export default function LoginScreen() {
       if (Platform.OS !== "web") {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
-      await login(rut.trim(), password);
+      await login(cleanRut(rut.trim()), password);
       router.replace("/(main)/home");
     } catch (e: any) {
       setError(e.message?.includes("401") ? "RUT o contraseña incorrectos" : "Error al iniciar sesión");

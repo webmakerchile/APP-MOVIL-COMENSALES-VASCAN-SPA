@@ -537,6 +537,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Periodos (time windows for minuta availability) ──
+  app.get("/api/periodos", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const allPeriodos = await storage.getAllPeriodos();
+      return res.json(allPeriodos);
+    } catch (error) {
+      console.error("Get periodos error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  app.get("/api/periodos/casino/:casinoId", async (req: Request, res: Response) => {
+    try {
+      const { casinoId } = req.params;
+      const periodosList = await storage.getPeriodosByCasino(casinoId);
+      return res.json(periodosList);
+    } catch (error) {
+      console.error("Get periodos by casino error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  app.post("/api/periodos", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { casinoId, nombre, fechaInicio, fechaFin } = req.body;
+      if (!casinoId || !nombre || !fechaInicio || !fechaFin) {
+        return res.status(400).json({ message: "Todos los campos son obligatorios" });
+      }
+      if (new Date(fechaFin) <= new Date(fechaInicio)) {
+        return res.status(400).json({ message: "La fecha/hora de fin debe ser posterior a la de inicio" });
+      }
+      const periodo = await storage.createPeriodo({
+        casinoId,
+        nombre,
+        fechaInicio: new Date(fechaInicio),
+        fechaFin: new Date(fechaFin),
+      });
+      return res.status(201).json(periodo);
+    } catch (error) {
+      console.error("Create periodo error:", error);
+      return res.status(500).json({ message: "Error al crear periodo" });
+    }
+  });
+
+  app.put("/api/periodos/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { nombre, fechaInicio, fechaFin, activo } = req.body;
+      const updateData: any = {};
+      if (nombre !== undefined) updateData.nombre = nombre;
+      if (fechaInicio !== undefined) updateData.fechaInicio = new Date(fechaInicio);
+      if (fechaFin !== undefined) updateData.fechaFin = new Date(fechaFin);
+      if (activo !== undefined) updateData.activo = activo;
+      if (updateData.fechaInicio && updateData.fechaFin && new Date(updateData.fechaFin) <= new Date(updateData.fechaInicio)) {
+        return res.status(400).json({ message: "La fecha/hora de fin debe ser posterior a la de inicio" });
+      }
+      const periodo = await storage.updatePeriodo(id, updateData);
+      if (!periodo) return res.status(404).json({ message: "Periodo no encontrado" });
+      return res.json(periodo);
+    } catch (error) {
+      console.error("Update periodo error:", error);
+      return res.status(500).json({ message: "Error al actualizar periodo" });
+    }
+  });
+
+  app.delete("/api/periodos/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deletePeriodo(id);
+      if (!deleted) return res.status(404).json({ message: "Periodo no encontrado" });
+      return res.json({ message: "Periodo desactivado" });
+    } catch (error) {
+      console.error("Delete periodo error:", error);
+      return res.status(500).json({ message: "Error al eliminar periodo" });
+    }
+  });
+
   // ── Pedidos (with Interlocutor logic) ──
   app.get("/api/pedidos/:userId", async (req: Request, res: Response) => {
     try {
@@ -564,6 +641,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const minuta = await storage.getMinuta(parsed.data.minutaId);
       if (!minuta) {
         return res.status(404).json({ message: "Minuta no encontrada" });
+      }
+
+      const casinoPeriodos = await storage.getPeriodosByCasino(minuta.casinoId);
+      const now = new Date();
+      const activePeriodos = casinoPeriodos.filter(p => p.activo && new Date(p.fechaInicio) <= now && new Date(p.fechaFin) >= now);
+      if (casinoPeriodos.filter(p => p.activo).length > 0 && activePeriodos.length === 0) {
+        return res.status(403).json({ message: "La inscripción no está disponible en este momento. Fuera del horario de inscripción." });
       }
 
       if (user.role === "comensal") {

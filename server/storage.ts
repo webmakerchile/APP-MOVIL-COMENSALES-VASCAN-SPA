@@ -42,7 +42,11 @@ export interface IStorage {
   createPedido(pedido: InsertPedido & { codigoQr?: string }): Promise<Pedido>;
   getPedidosByMinuta(minutaId: string): Promise<Pedido[]>;
   getPeriodosByCasino(casinoId: string): Promise<Periodo[]>;
+  getAllPeriodos(): Promise<Periodo[]>;
+  getPeriodo(id: string): Promise<Periodo | undefined>;
   createPeriodo(periodo: InsertPeriodo): Promise<Periodo>;
+  updatePeriodo(id: string, data: Partial<InsertPeriodo & { activo?: boolean }>): Promise<Periodo | undefined>;
+  deletePeriodo(id: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -153,9 +157,28 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(periodos).where(eq(periodos.casinoId, casinoId));
   }
 
+  async getAllPeriodos(): Promise<Periodo[]> {
+    return db.select().from(periodos);
+  }
+
+  async getPeriodo(id: string): Promise<Periodo | undefined> {
+    const [periodo] = await db.select().from(periodos).where(eq(periodos.id, id));
+    return periodo;
+  }
+
   async createPeriodo(insertPeriodo: InsertPeriodo): Promise<Periodo> {
     const [periodo] = await db.insert(periodos).values(insertPeriodo).returning();
     return periodo;
+  }
+
+  async updatePeriodo(id: string, data: Partial<InsertPeriodo & { activo?: boolean }>): Promise<Periodo | undefined> {
+    const [periodo] = await db.update(periodos).set(data).where(eq(periodos.id, id)).returning();
+    return periodo;
+  }
+
+  async deletePeriodo(id: string): Promise<boolean> {
+    const [periodo] = await db.update(periodos).set({ activo: false }).where(eq(periodos.id, id)).returning();
+    return !!periodo;
   }
 }
 

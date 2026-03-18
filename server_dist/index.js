@@ -29,7 +29,9 @@ import { drizzle } from "drizzle-orm/node-postgres";
 var schema_exports = {};
 __export(schema_exports, {
   casinos: () => casinos,
+  familias: () => familias,
   insertCasinoSchema: () => insertCasinoSchema,
+  insertFamiliaSchema: () => insertFamiliaSchema,
   insertMinutaSchema: () => insertMinutaSchema,
   insertPedidoSchema: () => insertPedidoSchema,
   insertPeriodoSchema: () => insertPeriodoSchema,
@@ -77,6 +79,13 @@ var casinos = pgTable("casinos", {
   activo: boolean("activo").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow()
 });
+var familias = pgTable("familias", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: text("nombre").notNull().unique(),
+  color: text("color").notNull().default("#D4A843"),
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow()
+});
 var minutas = pgTable("minutas", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   casinoId: varchar("casino_id").notNull().references(() => casinos.id),
@@ -104,6 +113,8 @@ var pedidos = pgTable("pedidos", {
   userId: varchar("user_id").notNull().references(() => users.id),
   minutaId: varchar("minuta_id").notNull().references(() => minutas.id),
   opcionSeleccionada: integer("opcion_seleccionada").notNull(),
+  tipo: text("tipo").notNull().default("seleccion"),
+  nombreVisita: text("nombre_visita"),
   asignadoPorDefecto: boolean("asignado_por_defecto").notNull().default(false),
   codigoQr: text("codigo_qr"),
   createdAt: timestamp("created_at").defaultNow()
@@ -124,6 +135,10 @@ var insertCasinoSchema = createInsertSchema(casinos).pick({
   nombre: true,
   direccion: true
 });
+var insertFamiliaSchema = createInsertSchema(familias).pick({
+  nombre: true,
+  color: true
+});
 var insertMinutaSchema = createInsertSchema(minutas).pick({
   casinoId: true,
   fecha: true,
@@ -138,7 +153,9 @@ var insertPedidoSchema = createInsertSchema(pedidos).pick({
   userId: true,
   minutaId: true,
   opcionSeleccionada: true,
-  codigoQr: true
+  codigoQr: true,
+  tipo: true,
+  nombreVisita: true
 });
 var insertPeriodoSchema = createInsertSchema(periodos).pick({
   casinoId: true,
@@ -238,6 +255,21 @@ var DatabaseStorage = class {
   }
   async getPedidosByMinuta(minutaId) {
     return db.select().from(pedidos).where(eq(pedidos.minutaId, minutaId));
+  }
+  async getAllFamilias() {
+    return db.select().from(familias);
+  }
+  async createFamilia(insertFamilia) {
+    const [familia] = await db.insert(familias).values(insertFamilia).returning();
+    return familia;
+  }
+  async updateFamilia(id, data) {
+    const [familia] = await db.update(familias).set(data).where(eq(familias.id, id)).returning();
+    return familia;
+  }
+  async deleteFamilia(id) {
+    const [familia] = await db.update(familias).set({ activo: false }).where(eq(familias.id, id)).returning();
+    return !!familia;
   }
   async getPeriodosByCasino(casinoId) {
     return db.select().from(periodos).where(eq(periodos.casinoId, casinoId));
@@ -719,6 +751,54 @@ async function registerRoutes(app2) {
       return res.status(500).json({ message: "Error al clonar minuta" });
     }
   });
+  app2.get("/api/familias", async (req, res) => {
+    try {
+      const allFamilias = await storage.getAllFamilias();
+      return res.json(allFamilias);
+    } catch (error) {
+      console.error("Get familias error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+  app2.post("/api/familias", requireAdmin, async (req, res) => {
+    try {
+      const { nombre, color } = req.body;
+      if (!nombre) return res.status(400).json({ message: "El nombre es obligatorio" });
+      const familia = await storage.createFamilia({ nombre, color: color || "#D4A843" });
+      return res.status(201).json(familia);
+    } catch (error) {
+      if (error.code === "23505") return res.status(409).json({ message: "Ya existe una familia con ese nombre" });
+      console.error("Create familia error:", error);
+      return res.status(500).json({ message: "Error al crear familia" });
+    }
+  });
+  app2.put("/api/familias/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { nombre, color, activo } = req.body;
+      const updateData = {};
+      if (nombre !== void 0) updateData.nombre = nombre;
+      if (color !== void 0) updateData.color = color;
+      if (activo !== void 0) updateData.activo = activo;
+      const familia = await storage.updateFamilia(id, updateData);
+      if (!familia) return res.status(404).json({ message: "Familia no encontrada" });
+      return res.json(familia);
+    } catch (error) {
+      console.error("Update familia error:", error);
+      return res.status(500).json({ message: "Error al actualizar familia" });
+    }
+  });
+  app2.delete("/api/familias/:id", requireAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteFamilia(id);
+      if (!deleted) return res.status(404).json({ message: "Familia no encontrada" });
+      return res.json({ message: "Familia desactivada" });
+    } catch (error) {
+      console.error("Delete familia error:", error);
+      return res.status(500).json({ message: "Error al eliminar familia" });
+    }
+  });
   app2.get("/api/periodos", requireAdmin, async (req, res) => {
     try {
       const allPeriodos = await storage.getAllPeriodos();
@@ -820,27 +900,111 @@ async function registerRoutes(app2) {
       if (casinoPeriodos.filter((p) => p.activo).length > 0 && activePeriodos.length === 0) {
         return res.status(403).json({ message: "La inscripci\xF3n no est\xE1 disponible en este momento. Fuera del horario de inscripci\xF3n." });
       }
-      if (user.role === "comensal") {
+      const tipo = req.body.tipo || "seleccion";
+      const nombreVisita = req.body.nombreVisita || null;
+      if (tipo === "visita" && user.role !== "interlocutor" && user.role !== "admin") {
+        return res.status(403).json({ message: "Solo interlocutores pueden emitir vales de visita" });
+      }
+      let opcionFinal = parsed.data.opcionSeleccionada;
+      if (tipo === "no_asiste") {
+        opcionFinal = 0;
+      } else if (user.role === "interlocutor" && tipo !== "visita") {
+        opcionFinal = 1;
+      }
+      if (user.role === "comensal" && tipo === "seleccion") {
         const existing = await storage.getPedidoByUserAndMinuta(parsed.data.userId, parsed.data.minutaId);
         if (existing) {
           return res.status(409).json({ message: "Ya tienes un pedido registrado para esta fecha. Solo puedes emitir 1 vale por comida." });
         }
       }
-      let opcionFinal = parsed.data.opcionSeleccionada;
-      if (user.role === "interlocutor") {
-        opcionFinal = 1;
-      }
-      const codigoQr = `VASCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const codigoQr = tipo === "no_asiste" ? null : `VASCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const pedido = await storage.createPedido({
         userId: parsed.data.userId,
         minutaId: parsed.data.minutaId,
         opcionSeleccionada: opcionFinal,
-        codigoQr
+        codigoQr,
+        tipo,
+        nombreVisita
       });
       return res.status(201).json(pedido);
     } catch (error) {
       console.error("Create pedido error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+  app2.post("/api/pedidos/semanal", async (req, res) => {
+    try {
+      const { userId, selecciones } = req.body;
+      if (!userId || !selecciones || !Array.isArray(selecciones)) {
+        return res.status(400).json({ message: "userId y selecciones son requeridos" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+      const results = [];
+      for (const sel of selecciones) {
+        const { minutaId, opcionSeleccionada, tipo } = sel;
+        if (!minutaId) continue;
+        const existing = await storage.getPedidoByUserAndMinuta(userId, minutaId);
+        if (existing) continue;
+        const minuta = await storage.getMinuta(minutaId);
+        if (!minuta) continue;
+        let opcion = opcionSeleccionada || 1;
+        const selTipo = tipo || "seleccion";
+        if (selTipo === "no_asiste") opcion = 0;
+        const codigoQr = selTipo === "no_asiste" ? null : `VASCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const pedido = await storage.createPedido({
+          userId,
+          minutaId,
+          opcionSeleccionada: opcion,
+          codigoQr,
+          tipo: selTipo
+        });
+        results.push(pedido);
+      }
+      return res.status(201).json(results);
+    } catch (error) {
+      console.error("Create pedidos semanales error:", error);
+      return res.status(500).json({ message: "Error al registrar selecciones semanales" });
+    }
+  });
+  app2.post("/api/pedidos/visita", async (req, res) => {
+    try {
+      const { userId, minutaId, nombreVisita } = req.body;
+      if (!userId || !minutaId || !nombreVisita) {
+        return res.status(400).json({ message: "userId, minutaId y nombreVisita son requeridos" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+      if (user.role !== "interlocutor" && user.role !== "admin") {
+        return res.status(403).json({ message: "Solo interlocutores pueden emitir vales de visita" });
+      }
+      const minuta = await storage.getMinuta(minutaId);
+      if (!minuta) return res.status(404).json({ message: "Minuta no encontrada" });
+      const codigoQr = `VASCAN-VISITA-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const pedido = await storage.createPedido({
+        userId,
+        minutaId,
+        opcionSeleccionada: 1,
+        codigoQr,
+        tipo: "visita",
+        nombreVisita
+      });
+      return res.status(201).json(pedido);
+    } catch (error) {
+      console.error("Create vale visita error:", error);
+      return res.status(500).json({ message: "Error al crear vale de visita" });
+    }
+  });
+  app2.get("/api/reportes/dashboard", requireAdmin, async (req, res) => {
+    try {
+      const allPedidos = await db.select().from(pedidos);
+      const totalInscripciones = allPedidos.filter((p) => p.tipo === "seleccion" || !p.tipo).length;
+      const totalNoAsiste = allPedidos.filter((p) => p.tipo === "no_asiste").length;
+      const totalVisitas = allPedidos.filter((p) => p.tipo === "visita").length;
+      return res.json({ totalInscripciones, totalNoAsiste, totalVisitas });
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
+      return res.status(500).json({ message: "Error al obtener estad\xEDsticas" });
     }
   });
   app2.get("/api/reportes/consolidacion", requireAdmin, async (req, res) => {
@@ -859,13 +1023,16 @@ async function registerRoutes(app2) {
         return res.json({ casinoNombre: casino.nombre, fecha, minuta: null, opciones: [], totalPedidos: 0 });
       }
       const pedidosForMinuta = await storage.getPedidosByMinuta(minuta.id);
-      const totalPedidos = pedidosForMinuta.length;
+      const seleccionPedidos = pedidosForMinuta.filter((p) => p.tipo !== "no_asiste" && p.tipo !== "visita");
+      const noAsistePedidos = pedidosForMinuta.filter((p) => p.tipo === "no_asiste");
+      const visitaPedidos = pedidosForMinuta.filter((p) => p.tipo === "visita");
+      const totalPedidos = seleccionPedidos.length;
       const opciones = [];
       const allOptions = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5];
       for (let i = 0; i < allOptions.length; i++) {
         if (!allOptions[i]) continue;
         const num = i + 1;
-        const count = pedidosForMinuta.filter((p) => p.opcionSeleccionada === num).length;
+        const count = seleccionPedidos.filter((p) => p.opcionSeleccionada === num).length;
         opciones.push({
           numero: num,
           descripcion: allOptions[i],
@@ -878,7 +1045,10 @@ async function registerRoutes(app2) {
         fecha,
         minuta: { id: minuta.id, familia: minuta.familia, opcion1: minuta.opcion1, opcion2: minuta.opcion2, opcion3: minuta.opcion3, opcion4: minuta.opcion4, opcion5: minuta.opcion5 },
         opciones,
-        totalPedidos
+        totalPedidos,
+        totalNoAsiste: noAsistePedidos.length,
+        totalVisitas: visitaPedidos.length,
+        visitas: visitaPedidos.map((v) => ({ nombreVisita: v.nombreVisita, codigoQr: v.codigoQr }))
       });
     } catch (error) {
       console.error("Consolidacion error:", error);
@@ -1591,6 +1761,7 @@ function setupErrorHandler(app2) {
   });
 }
 (async () => {
+  app.set("trust proxy", 1);
   setupCors(app);
   setupBodyParsing(app);
   setupRequestLogging(app);

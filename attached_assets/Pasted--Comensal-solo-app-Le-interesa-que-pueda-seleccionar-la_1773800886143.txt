@@ -1,0 +1,63 @@
+👤 Comensal (solo app)
+
+Le interesa que pueda seleccionar la semana completa.
+
+La persona puede quedar con la idea de haber seleccionado toda la semana. (Que se cambien de colores verde pálido para saber que esta seleccionado). 
+
+¿Qué sucede en la realidad?, tiene que tener su almuerzo si o si, el comensal debe de definir lo que debe de comer, si el selecciona una semana, el comensal de lunes a viernes tiene que tener hecha su selección porque si el no selecciona nada la próxima semana se cargan a opción 1. EJ: Hace la selección esta semana para comer la próxima semana, piensa que se te olvido meterte por olvido, si el se presenta a trabajar el Lunes por ejemplo no puede dejarlo sin comer, por defecto toda esa semana se le carga con opción 1 (No se puede hacer nada porque la empresa no le negó el almuerzo, solo que fue negligencia de él)
+
+Mi cliente me pide que la persona inscriba la semana completa, 3,4 se le olvido el 5, pidió día administrativo, vacaciones o ese día no va a comer, tiene que declararlo (Todo esta información tiene que llegar al Dashboard). Tienen que declarar si o si en su semana para evitar problemas.
+
+La semana parte Martes (Pero parte el Lunes a Viernes), esto es lo que pide mi cliente: Le encantaría poder dar de alta una minuta, va soltando de a semana, del martes 5 al jueves "X" para que se inscriban y que cuando entren a la aplicación el comensal a hacer su carga el lo que verá será lo que dio de alta. (Esto para evitar confusiones), tiene lista minutas sen especifica meses anteriores pensando en el precio de ahora, los precios pueden variar, pero como ya la tiene entregada y desarrollada el esta comprometido a entregarle arroz, al separar semana a semana poder ir variando y cambiando todo lo que tiene que ver con frituras para ir liberando semana 1 a 1. EJ: Para el 18 de Septiembre, tiene 2 a 3 días de trabajo, para que se inscriban liberan la semana anterior, liberan esos 3 días + los de la próxima semana para que se inscriban con 8 o + días, la taza de inscripción sube y es más alta.
+
+Revisar el por que sale el Martes, validar con el alta.
+
+👤 Admin (panel web + app)
+
+Página tiene que ir armando el Rut como en el celular de forma automática. 
+
+Decimos que crearemos un nuevo usuario, consultas
+
+La minuta se logra asociar a un casino? - Si, se logra asociar a una minuta.
+
+Lo que hace el sistema cuando tu comienzas como comensal, rut, contraseña y tira la minuta del almuerzo. Mi cliente tiene casino que cuando terminan las jornadas del día, como los señores terminan de trabajar de tanta hora a tanta le pueden traer colación a fuera de horario, es que tienen que ir a preguntarle a la persona. Si mi cliente tuviera una minuta standard, si todos los días es pure con arroz o "X" casino, esta minuta solamente se asignaría cuando fuese necesario. Mi cliente debe poder crear una minuta, colación especial por ejemplo, si mi cliente la activa el comensal puede entrar y verla, minuta especial o normal, ingresa a la minuta especial. Cual sería la negociación del interlocutor, el le diría "cuantas personas tiene" 10 o 15, el le libera la minuta especial y que inscriba de aquí a las 5:00 PM, de aquí a las 8:00 PM el esta ahí por ejemplo, internamente el interlocutor habla con ello y el que no pidió no comió. Para que eso suceda el interlocutor debe estar separado, fuera que cuando agrupen sean los grupos que pueden trabajar y que estén activos. Minuta especial por situación en especial en conclusión. El puede poder cerrar la minuta o que se cierre automática por un rango de hora
+
+
+Arreglar el tema de los usuarios para poder hacerlo con usuarios reales, casinos reales, minutas reales.
+
+Consulta: Área de las minutas, tener la posibilidad de ir creando "Familias" de minutas, EJ: VIP, almuerzo ejecutivo, etc.
+
+Casinos: En esta etapa solo será Nombre y Dirección, no mucho más. Quiere integrar muchos KPIS, que creemos un usuario manipulador de alimentos y tiene que hacer cosas durante la semana, por ejemplo la limpieza de los saleros, mantener a todos ocupados (Esto no es parte de ahora es solamente una idea para un futuro, etapa B)
+
+👤 Interlocutor (solo app)
+
+Es un comensal +, la figura es esta: Son una empresa de alimentación que tiene sus trabajadores, legalmente tienen un contrato con él, necesitan con quien hablar para el otro lado con el gerente general por ejemplo, el Interlocutor es quien maneja que todo quede organizado. Es quien intercede por los demás.
+
+Esta persona es el encargado de recursos humanos, tienen contrataciones, durante esta semana por ejemplo hacen entrevista de trabajo y hacen por ejemplo acuerdos de trabajo, preséntense x día, si ellos trabajan x día ya no pasaron por el proceso de la anterior semana. Que es lo que hace esta persona, esta será la tónica: "Sabes que tendremos x ingresos" le enviará la opción 1 por ejemplo. No le entrega a nadie comida si no le pasan un "Vale" siendo que la persona no existe lo que se hace el interlocutor va al tótem, ingresa su Rut y le pregunta "Va a sacar su vale" para que ella puede comer ese día o sacamos un vale visita, tope (50 o 10 vale visitas) puede sacar el limite para hacer el proceso, o puede que tenga un equipo de trabajo y saca un vale y se lo pasa.
+
+El interlocutor tiene esa funcionalidad de visitas e interceder por los demás, es parte espontanea de esto
+
+El debe de tener acceso a ver las minutas que ellos tengan habilitadas para la próxima semana. Tienen que poder sacar vale visitas y tomar el rol de intercesor para todos, tiene que revisarla, verla y confirmar que todo esta bien (Si no confirma o no hace nada se confirma igualmente la minuta para cumplir la función), no que la modifique o cambie, si no que pueda dar retroalimentación para poder cambiarla.
+
+Interlocutora tiene que tener alertas automáticas que avise si esta muy bajo o quien no se inscribió para poder enviarle el aviso.
+
+
+
+
+
+
+
+
+En usuario se tiene que hacer el tema de Whatsapp. Para que trabajar el Lunes si tiene que trabajar "X" día.
+
+Lo que quiere hacer cuando el cliente quiera hacerlo  con 10 o 15 personas que puedan hacer una inscripción en paralelo. Por el sistema y por el formulario, si o si tengan su almuerzo. Si algo falla van a poder probar el sistema. Tiene aprensiones, el TOTEM funciona con UPS. Hay que tomar todos los respaldos para que el sistema no dependa del Internet, la inscripción se puede hacer en cualquier lugar. El sistema tiene que estar respaldado en el tótem. La información siempre la tendrá respaldada por 1 semana, le interesa respaldar bien conservada es del vale que sacaron.
+
+
+
+
+
+
+
+
+
+

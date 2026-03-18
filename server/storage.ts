@@ -3,6 +3,7 @@ import { db } from "./db";
 import {
   users,
   casinos,
+  familias,
   minutas,
   pedidos,
   periodos,
@@ -10,6 +11,8 @@ import {
   type InsertUser,
   type Casino,
   type InsertCasino,
+  type Familia,
+  type InsertFamilia,
   type Minuta,
   type InsertMinuta,
   type Pedido,
@@ -41,6 +44,10 @@ export interface IStorage {
   getPedidoByUserAndMinuta(userId: string, minutaId: string): Promise<Pedido | undefined>;
   createPedido(pedido: InsertPedido & { codigoQr?: string }): Promise<Pedido>;
   getPedidosByMinuta(minutaId: string): Promise<Pedido[]>;
+  getAllFamilias(): Promise<Familia[]>;
+  createFamilia(familia: InsertFamilia): Promise<Familia>;
+  updateFamilia(id: string, data: Partial<InsertFamilia & { activo?: boolean }>): Promise<Familia | undefined>;
+  deleteFamilia(id: string): Promise<boolean>;
   getPeriodosByCasino(casinoId: string): Promise<Periodo[]>;
   getAllPeriodos(): Promise<Periodo[]>;
   getPeriodo(id: string): Promise<Periodo | undefined>;
@@ -151,6 +158,25 @@ export class DatabaseStorage implements IStorage {
 
   async getPedidosByMinuta(minutaId: string): Promise<Pedido[]> {
     return db.select().from(pedidos).where(eq(pedidos.minutaId, minutaId));
+  }
+
+  async getAllFamilias(): Promise<Familia[]> {
+    return db.select().from(familias);
+  }
+
+  async createFamilia(insertFamilia: InsertFamilia): Promise<Familia> {
+    const [familia] = await db.insert(familias).values(insertFamilia).returning();
+    return familia;
+  }
+
+  async updateFamilia(id: string, data: Partial<InsertFamilia & { activo?: boolean }>): Promise<Familia | undefined> {
+    const [familia] = await db.update(familias).set(data).where(eq(familias.id, id)).returning();
+    return familia;
+  }
+
+  async deleteFamilia(id: string): Promise<boolean> {
+    const [familia] = await db.update(familias).set({ activo: false }).where(eq(familias.id, id)).returning();
+    return !!familia;
   }
 
   async getPeriodosByCasino(casinoId: string): Promise<Periodo[]> {

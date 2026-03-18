@@ -15,13 +15,14 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 ## Data Model
 - **Users**: Authenticated via Chilean RUT + password. Roles: admin, comensal, interlocutor
 - **Casinos**: Dining locations/venues  
-- **Minutas**: Daily menus with up to 5 options per date per casino. Each has a `familia` field (almuerzo, desayuno, colación, almuerzo_fds, cena, once)
-- **Pedidos**: Meal orders linking users to their selected menu option
-- **Periodos**: Enrollment time windows
+- **Minutas**: Daily menus with up to 5 options per date per casino. Each has a `familia` field linked to dynamic Familias table
+- **Familias**: Dynamic categories for minutas (Almuerzo, Desayuno, Colación, VIP, etc.) with custom colors. Admin CRUD via `/api/familias`
+- **Pedidos**: Meal orders linking users to their selected menu option. Has `tipo` field (seleccion, no_asiste, visita) and optional `nombreVisita` for visitor vouchers
+- **Periodos**: Enrollment time windows per casino
 
 ## Key Files
 ### Backend
-- `shared/schema.ts` - Drizzle schema with all entities
+- `shared/schema.ts` - Drizzle schema with all entities (users, casinos, minutas, familias, pedidos, periodos)
 - `server/routes.ts` - Full CRUD API endpoints + auto-seed
 - `server/storage.ts` - Database access layer with CRUD operations
 - `server/db.ts` - Database connection
@@ -29,17 +30,20 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 ### Mobile App
 - `lib/auth-context.tsx` - Auth state management with AsyncStorage
 - `lib/query-client.ts` - React Query + API utilities
-- `app/login.tsx` - Login screen with RUT authentication
-- `app/(main)/home.tsx` - Menu listing (minutas) screen with familia badges
-- `app/(main)/minuta-detail.tsx` - Menu option selection (up to 5 options) + QR voucher
+- `app/login.tsx` - Login screen with RUT auto-formatting
+- `app/(main)/home.tsx` - Weekly inscription view with expandable day cards, option selection, no_asiste, and batch submit
+- `app/(main)/minuta-detail.tsx` - Menu option detail + QR voucher display
+- `app/(main)/vale-visita.tsx` - Interlocutor visitor voucher creation screen
 
 ### Admin Web Panel
 - `web/src/admin.html` - React SPA with Tailwind CSS (served at /admin)
-  - Dashboard with stats
-  - Usuarios: Full CRUD (create, edit, delete, toggle active, search)
-  - Casinos: Full CRUD (create, edit, activate/deactivate)
-  - Minutas: Full CRUD per casino with familia filter, multi-casino assignment, clone feature
-  - Consolidation report (production summary per day)
+  - Dashboard with stats (users, casinos, minutas, inscripciones, no_asiste, visitas)
+  - Usuarios: Full CRUD with RUT auto-formatting
+  - Casinos: Full CRUD
+  - Minutas: Full CRUD per casino with dynamic familia filter, multi-casino assignment, clone feature
+  - Familias: Full CRUD (create custom familias with colors)
+  - Consolidation report with no_asiste/visita breakdowns
+  - Periodos: Enrollment time windows management
   - Bulk upload from Excel (users + minutas)
 
 ### Static Pages
@@ -73,6 +77,11 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 - `DELETE /api/minutas/:id` - Soft-delete (deactivate) minuta
 - `POST /api/minutas/:id/clonar` - Clone minuta to new date/casinos
 
+### Familias CRUD
+- `GET /api/familias` - List all familias
+- `POST /api/familias` - Create familia
+- `PUT /api/familias/:id` - Update familia (name, color, activo)
+
 ### Periodos CRUD
 - `GET /api/periodos` - List all periodos (admin)
 - `GET /api/periodos/casino/:casinoId` - Get periodos for a casino
@@ -80,10 +89,17 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 - `PUT /api/periodos/:id` - Update periodo (admin)
 - `DELETE /api/periodos/:id` - Soft-delete (deactivate) periodo
 
-### Other
-- `POST /api/pedidos` - Create meal order (validates active periodo if any exist)
+### Pedidos
+- `POST /api/pedidos` - Create single meal order (validates active periodo)
+- `POST /api/pedidos/semanal` - Batch weekly inscription (array of selections with tipo)
+- `POST /api/pedidos/visita` - Create visitor voucher (interlocutor/admin only)
 - `GET /api/pedidos/:userId` - Get user's orders
-- `GET /api/reportes/consolidacion?casinoId=X&fecha=Y` - Consolidation report
+
+### Reports
+- `GET /api/reportes/dashboard` - Dashboard stats (inscripciones, no_asiste, visitas counts)
+- `GET /api/reportes/consolidacion?casinoId=X&fecha=Y` - Consolidation report with no_asiste/visita breakdown
+
+### Other
 - `POST /api/usuarios/upload` - Bulk user upload from Excel
 - `POST /api/minutas/upload` - Bulk minuta upload from Excel
 - `GET /api/plantillas/usuarios` - Download users Excel template
@@ -92,11 +108,13 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 - `GET /admin` - Admin web panel
 
 ## Business Rules
-- **Comensal**: Max 1 pedido per minuta (per day)
-- **Interlocutor**: Multiple pedidos per day, always forced to Opcion 1
-- **Minutas**: 5 options (3 required, 2 optional), familia categorization
+- **Comensal**: Max 1 pedido per minuta (per day). Can declare "no_asiste" (opcion=0, no QR generated)
+- **Interlocutor**: Can issue visitor vouchers (tipo=visita, with nombreVisita). Multiple pedidos per day, always forced to Opcion 1
+- **Minutas**: 5 options (3 required, 2 optional), dynamic familia categorization
+- **Weekly Inscription**: Comensales select options for multiple days at once via batch submit
 - **Bulk Upload**: Excel with columns RUT, Nombre, Apellido, Rol, Casino (name or UUID). Default password = first 4 digits of RUT
 - **Super Admin**: RUT `21212011-1` (hidden from all user listings)
+- **RUT Auto-formatting**: Both mobile app and admin panel format RUT with dots and dash as user types
 
 ## Test Credentials
 - Comensal: RUT `12345678-9`, password `123456`

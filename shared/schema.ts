@@ -42,6 +42,16 @@ export const casinos = pgTable("casinos", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const familias = pgTable("familias", {
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  nombre: text("nombre").notNull().unique(),
+  color: text("color").notNull().default("#D4A843"),
+  activo: boolean("activo").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const minutas = pgTable("minutas", {
   id: varchar("id")
     .primaryKey()
@@ -85,6 +95,8 @@ export const pedidos = pgTable("pedidos", {
     .notNull()
     .references(() => minutas.id),
   opcionSeleccionada: integer("opcion_seleccionada").notNull(),
+  tipo: text("tipo").notNull().default("seleccion"),
+  nombreVisita: text("nombre_visita"),
   asignadoPorDefecto: boolean("asignado_por_defecto")
     .notNull()
     .default(false),
@@ -111,6 +123,11 @@ export const insertCasinoSchema = createInsertSchema(casinos).pick({
   direccion: true,
 });
 
+export const insertFamiliaSchema = createInsertSchema(familias).pick({
+  nombre: true,
+  color: true,
+});
+
 export const insertMinutaSchema = createInsertSchema(minutas).pick({
   casinoId: true,
   fecha: true,
@@ -127,6 +144,8 @@ export const insertPedidoSchema = createInsertSchema(pedidos).pick({
   minutaId: true,
   opcionSeleccionada: true,
   codigoQr: true,
+  tipo: true,
+  nombreVisita: true,
 });
 
 export const insertPeriodoSchema = createInsertSchema(periodos).pick({
@@ -140,6 +159,8 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type Casino = typeof casinos.$inferSelect;
 export type InsertCasino = z.infer<typeof insertCasinoSchema>;
+export type Familia = typeof familias.$inferSelect;
+export type InsertFamilia = z.infer<typeof insertFamiliaSchema>;
 export type Minuta = typeof minutas.$inferSelect;
 export type InsertMinuta = z.infer<typeof insertMinutaSchema>;
 export type Pedido = typeof pedidos.$inferSelect;

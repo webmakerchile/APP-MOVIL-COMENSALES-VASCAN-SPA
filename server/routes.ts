@@ -9,8 +9,8 @@ import ExcelJS from "exceljs";
 import * as path from "path";
 import * as fs from "fs";
 import { storage } from "./storage";
-import { pool } from "./db";
-import { loginSchema, insertUserSchema, insertMinutaSchema, insertPedidoSchema, insertCasinoSchema } from "@shared/schema";
+import { pool, db } from "./db";
+import { loginSchema, insertUserSchema, insertMinutaSchema, insertPedidoSchema, insertCasinoSchema, pedidos as pedidosTable } from "@shared/schema";
 
 const PgSession = connectPgSimple(session);
 const upload = multer({ dest: "/tmp/uploads/" });
@@ -537,6 +537,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Familias CRUD ──
+  app.get("/api/familias", async (req: Request, res: Response) => {
+    try {
+      const allFamilias = await storage.getAllFamilias();
+      return res.json(allFamilias);
+    } catch (error) {
+      console.error("Get familias error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  app.post("/api/familias", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { nombre, color } = req.body;
+      if (!nombre) return res.status(400).json({ message: "El nombre es obligatorio" });
+      const familia = await storage.createFamilia({ nombre, color: color || "#D4A843" });
+      return res.status(201).json(familia);
+    } catch (error: any) {
+      if (error.code === "23505") return res.status(409).json({ message: "Ya existe una familia con ese nombre" });
+      console.error("Create familia error:", error);
+      return res.status(500).json({ message: "Error al crear familia" });
+    }
+  });
+
+  app.put("/api/familias/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { nombre, color, activo } = req.body;
+      const updateData: any = {};
+      if (nombre !== undefined) updateData.nombre = nombre;
+      if (color !== undefined) updateData.color = color;
+      if (activo !== undefined) updateData.activo = activo;
+      const familia = await storage.updateFamilia(id, updateData);
+      if (!familia) return res.status(404).json({ message: "Familia no encontrada" });
+      return res.json(familia);
+    } catch (error) {
+      console.error("Update familia error:", error);
+      return res.status(500).json({ message: "Error al actualizar familia" });
+    }
+  });
+
+  app.delete("/api/familias/:id", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const deleted = await storage.deleteFamilia(id);
+      if (!deleted) return res.status(404).json({ message: "Familia no encontrada" });
+      return res.json({ message: "Familia desactivada" });
+    } catch (error) {
+      console.error("Delete familia error:", error);
+      return res.status(500).json({ message: "Error al eliminar familia" });
+    }
+  });
+
   // ── Periodos (time windows for minuta availability) ──
   app.get("/api/periodos", requireAdmin, async (req: Request, res: Response) => {
     try {
@@ -650,30 +703,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "La inscripción no está disponible en este momento. Fuera del horario de inscripción." });
       }
 
-      if (user.role === "comensal") {
+      const tipo = req.body.tipo || "seleccion";
+      const nombreVisita = req.body.nombreVisita || null;
+
+      if (tipo === "visita" && user.role !== "interlocutor" && user.role !== "admin") {
+        return res.status(403).json({ message: "Solo interlocutores pueden emitir vales de visita" });
+      }
+
+      let opcionFinal = parsed.data.opcionSeleccionada;
+      if (tipo === "no_asiste") {
+        opcionFinal = 0;
+      } else if (user.role === "interlocutor" && tipo !== "visita") {
+        opcionFinal = 1;
+      }
+
+      if (user.role === "comensal" && tipo === "seleccion") {
         const existing = await storage.getPedidoByUserAndMinuta(parsed.data.userId, parsed.data.minutaId);
         if (existing) {
           return res.status(409).json({ message: "Ya tienes un pedido registrado para esta fecha. Solo puedes emitir 1 vale por comida." });
         }
       }
 
-      let opcionFinal = parsed.data.opcionSeleccionada;
-      if (user.role === "interlocutor") {
-        opcionFinal = 1;
-      }
-
-      const codigoQr = `VASCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const codigoQr = tipo === "no_asiste" ? null : `VASCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const pedido = await storage.createPedido({
         userId: parsed.data.userId,
         minutaId: parsed.data.minutaId,
         opcionSeleccionada: opcionFinal,
         codigoQr,
+        tipo,
+        nombreVisita,
       });
 
       return res.status(201).json(pedido);
     } catch (error) {
       console.error("Create pedido error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  app.post("/api/pedidos/semanal", async (req: Request, res: Response) => {
+    try {
+      const { userId, selecciones } = req.body;
+      if (!userId || !selecciones || !Array.isArray(selecciones)) {
+        return res.status(400).json({ message: "userId y selecciones son requeridos" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+
+      const results: any[] = [];
+      for (const sel of selecciones) {
+        const { minutaId, opcionSeleccionada, tipo } = sel;
+        if (!minutaId) continue;
+
+        const existing = await storage.getPedidoByUserAndMinuta(userId, minutaId);
+        if (existing) continue;
+
+        const minuta = await storage.getMinuta(minutaId);
+        if (!minuta) continue;
+
+        let opcion = opcionSeleccionada || 1;
+        const selTipo = tipo || "seleccion";
+        if (selTipo === "no_asiste") opcion = 0;
+
+        const codigoQr = selTipo === "no_asiste" ? null : `VASCAN-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const pedido = await storage.createPedido({
+          userId,
+          minutaId,
+          opcionSeleccionada: opcion,
+          codigoQr,
+          tipo: selTipo,
+        });
+        results.push(pedido);
+      }
+
+      return res.status(201).json(results);
+    } catch (error) {
+      console.error("Create pedidos semanales error:", error);
+      return res.status(500).json({ message: "Error al registrar selecciones semanales" });
+    }
+  });
+
+  app.post("/api/pedidos/visita", async (req: Request, res: Response) => {
+    try {
+      const { userId, minutaId, nombreVisita } = req.body;
+      if (!userId || !minutaId || !nombreVisita) {
+        return res.status(400).json({ message: "userId, minutaId y nombreVisita son requeridos" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+
+      if (user.role !== "interlocutor" && user.role !== "admin") {
+        return res.status(403).json({ message: "Solo interlocutores pueden emitir vales de visita" });
+      }
+
+      const minuta = await storage.getMinuta(minutaId);
+      if (!minuta) return res.status(404).json({ message: "Minuta no encontrada" });
+
+      const codigoQr = `VASCAN-VISITA-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const pedido = await storage.createPedido({
+        userId,
+        minutaId,
+        opcionSeleccionada: 1,
+        codigoQr,
+        tipo: "visita",
+        nombreVisita,
+      });
+
+      return res.status(201).json(pedido);
+    } catch (error) {
+      console.error("Create vale visita error:", error);
+      return res.status(500).json({ message: "Error al crear vale de visita" });
+    }
+  });
+
+  // ── Dashboard Stats ──
+  app.get("/api/reportes/dashboard", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const allPedidos = await db.select().from(pedidosTable);
+      const totalInscripciones = allPedidos.filter(p => p.tipo === "seleccion" || !p.tipo).length;
+      const totalNoAsiste = allPedidos.filter(p => p.tipo === "no_asiste").length;
+      const totalVisitas = allPedidos.filter(p => p.tipo === "visita").length;
+      return res.json({ totalInscripciones, totalNoAsiste, totalVisitas });
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
+      return res.status(500).json({ message: "Error al obtener estadísticas" });
     }
   });
 
@@ -698,7 +853,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const pedidosForMinuta = await storage.getPedidosByMinuta(minuta.id);
-      const totalPedidos = pedidosForMinuta.length;
+      const seleccionPedidos = pedidosForMinuta.filter(p => p.tipo !== "no_asiste" && p.tipo !== "visita");
+      const noAsistePedidos = pedidosForMinuta.filter(p => p.tipo === "no_asiste");
+      const visitaPedidos = pedidosForMinuta.filter(p => p.tipo === "visita");
+      const totalPedidos = seleccionPedidos.length;
 
       const opciones = [];
       const allOptions: (string | null)[] = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5];
@@ -706,7 +864,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (let i = 0; i < allOptions.length; i++) {
         if (!allOptions[i]) continue;
         const num = i + 1;
-        const count = pedidosForMinuta.filter((p) => p.opcionSeleccionada === num).length;
+        const count = seleccionPedidos.filter((p) => p.opcionSeleccionada === num).length;
         opciones.push({
           numero: num,
           descripcion: allOptions[i],
@@ -721,6 +879,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         minuta: { id: minuta.id, familia: minuta.familia, opcion1: minuta.opcion1, opcion2: minuta.opcion2, opcion3: minuta.opcion3, opcion4: minuta.opcion4, opcion5: minuta.opcion5 },
         opciones,
         totalPedidos,
+        totalNoAsiste: noAsistePedidos.length,
+        totalVisitas: visitaPedidos.length,
+        visitas: visitaPedidos.map(v => ({ nombreVisita: v.nombreVisita, codigoQr: v.codigoQr })),
       });
     } catch (error) {
       console.error("Consolidacion error:", error);

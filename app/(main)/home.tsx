@@ -1,24 +1,24 @@
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   View,
   Text,
   StyleSheet,
   Pressable,
-  FlatList,
+  ScrollView,
   ActivityIndicator,
   RefreshControl,
   Platform,
   Image,
+  Alert,
 } from "react-native";
 import { router } from "expo-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
-import { getApiUrl } from "@/lib/query-client";
-import { fetch } from "expo/fetch";
+import { apiRequest } from "@/lib/query-client";
 
 interface Minuta {
   id: string;
@@ -33,160 +33,84 @@ interface Minuta {
   activo: boolean;
 }
 
-const FAMILIA_LABELS: Record<string, string> = {
-  almuerzo: "Almuerzo",
-  desayuno: "Desayuno",
-  colacion: "Colación",
-  almuerzo_fds: "Almuerzo Fin de Semana",
-  cena: "Cena",
-  once: "Once",
+interface Pedido {
+  id: string;
+  userId: string;
+  minutaId: string;
+  opcionSeleccionada: number;
+  tipo?: string;
+  codigoQr: string | null;
+}
+
+const DAYS_ES = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const DAYS_SHORT = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const MONTHS_ES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+
+function getOptions(m: Minuta) {
+  const opts: { number: number; text: string }[] = [
+    { number: 1, text: m.opcion1 },
+    { number: 2, text: m.opcion2 },
+    { number: 3, text: m.opcion3 },
+  ];
+  if (m.opcion4) opts.push({ number: 4, text: m.opcion4 });
+  if (m.opcion5) opts.push({ number: 5, text: m.opcion5 });
+  return opts;
+}
+
+type DaySelection = {
+  minutaId: string;
+  opcionSeleccionada: number;
+  tipo: "seleccion" | "no_asiste";
 };
-const FAMILIA_COLORS: Record<string, string> = {
-  almuerzo: "#D4A843",
-  desayuno: "#38BDF8",
-  colacion: "#4ADE80",
-  almuerzo_fds: "#A78BFA",
-  cena: "#818CF8",
-  once: "#FB7185",
-};
-
-const DAYS_ES = [
-  "Domingo",
-  "Lunes",
-  "Martes",
-  "Miércoles",
-  "Jueves",
-  "Viernes",
-  "Sábado",
-];
-const MONTHS_ES = [
-  "Ene",
-  "Feb",
-  "Mar",
-  "Abr",
-  "May",
-  "Jun",
-  "Jul",
-  "Ago",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dic",
-];
-
-function formatDateLabel(dateStr: string) {
-  const d = new Date(dateStr + "T12:00:00");
-  const day = DAYS_ES[d.getDay()];
-  const num = d.getDate();
-  const month = MONTHS_ES[d.getMonth()];
-  return { day, num, month };
-}
-
-function isToday(dateStr: string) {
-  const today = new Date();
-  const d = new Date(dateStr + "T12:00:00");
-  return (
-    today.getFullYear() === d.getFullYear() &&
-    today.getMonth() === d.getMonth() &&
-    today.getDate() === d.getDate()
-  );
-}
-
-function MinutaCard({ item }: { item: Minuta }) {
-  const dateInfo = formatDateLabel(item.fecha);
-  const today = isToday(item.fecha);
-  const fam = item.familia || "almuerzo";
-  let optionCount = 3;
-  if (item.opcion4) optionCount = 4;
-  if (item.opcion5) optionCount = 5;
-
-  function handlePress() {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-    router.push({
-      pathname: "/(main)/minuta-detail",
-      params: { id: item.id, fecha: item.fecha },
-    });
-  }
-
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.minutaCard,
-        today && styles.minutaCardToday,
-        pressed && styles.minutaCardPressed,
-      ]}
-      onPress={handlePress}
-    >
-      <View style={[styles.dateColumn, today && styles.dateColumnToday]}>
-        <Text style={[styles.dayText, today && styles.dayTextToday]}>
-          {dateInfo.day}
-        </Text>
-        <Text style={[styles.dateNum, today && styles.dateNumToday]}>
-          {dateInfo.num}
-        </Text>
-        <Text style={[styles.monthText, today && styles.monthTextToday]}>
-          {dateInfo.month}
-        </Text>
-      </View>
-      <View style={styles.menuContent}>
-        <View style={styles.menuHeader}>
-          <View style={[styles.familiaBadge, { backgroundColor: (FAMILIA_COLORS[fam] || Colors.primary) + "22" }]}>
-            <Text style={[styles.familiaBadgeText, { color: FAMILIA_COLORS[fam] || Colors.primary }]}>
-              {FAMILIA_LABELS[fam] || fam}
-            </Text>
-          </View>
-          {today ? (
-            <View style={styles.todayBadge}>
-              <Text style={styles.todayBadgeText}>HOY</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.optionsList}>
-          <OptionPreview number={1} text={item.opcion1} />
-          <OptionPreview number={2} text={item.opcion2} />
-          <OptionPreview number={3} text={item.opcion3} />
-          {item.opcion4 ? (
-            <OptionPreview number={4} text={item.opcion4} />
-          ) : null}
-          {item.opcion5 ? (
-            <OptionPreview number={5} text={item.opcion5} />
-          ) : null}
-        </View>
-        <View style={styles.menuFooter}>
-          <Text style={styles.optionCountText}>
-            {optionCount} opciones disponibles
-          </Text>
-          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
-function OptionPreview({ number, text }: { number: number; text: string }) {
-  return (
-    <View style={styles.optionRow}>
-      <View style={styles.optionNumber}>
-        <Text style={styles.optionNumberText}>{number}</Text>
-      </View>
-      <Text style={styles.optionText} numberOfLines={1}>
-        {text}
-      </Text>
-    </View>
-  );
-}
 
 export default function HomeScreen() {
   const { user, logout } = useAuth();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const [selections, setSelections] = useState<Record<string, DaySelection>>({});
+  const [expandedMinuta, setExpandedMinuta] = useState<string | null>(null);
 
   const { data: minutas, isLoading, isRefetching, refetch } = useQuery<Minuta[]>({
     queryKey: ["/api/minutas", user?.casinoId ?? "none"],
     enabled: !!user?.casinoId,
   });
+
+  const { data: pedidos } = useQuery<Pedido[]>({
+    queryKey: ["/api/pedidos", user?.id ?? "none"],
+    enabled: !!user?.id,
+  });
+
+  const submitWeek = useMutation({
+    mutationFn: async (selArray: { minutaId: string; opcionSeleccionada: number; tipo: string }[]) => {
+      const res = await apiRequest("POST", "/api/pedidos/semanal", {
+        userId: user!.id,
+        selecciones: selArray,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/pedidos"] });
+      setSelections({});
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      Alert.alert("Listo", "Tu inscripción semanal fue registrada correctamente.");
+    },
+    onError: () => {
+      Alert.alert("Error", "Hubo un problema al registrar tu inscripción.");
+    },
+  });
+
+  const sortedMinutas = useMemo(() =>
+    (minutas ?? []).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime()),
+    [minutas]
+  );
+
+  const pedidoByMinuta = useMemo(() => {
+    const map: Record<string, Pedido> = {};
+    (pedidos ?? []).forEach(p => { map[p.minutaId] = p; });
+    return map;
+  }, [pedidos]);
 
   function handleLogout() {
     if (Platform.OS !== "web") {
@@ -196,9 +120,81 @@ export default function HomeScreen() {
     router.replace("/login");
   }
 
-  const sortedMinutas = (minutas ?? []).sort(
-    (a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime(),
-  );
+  function selectOption(minutaId: string, opcion: number) {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setSelections(prev => ({
+      ...prev,
+      [minutaId]: { minutaId, opcionSeleccionada: opcion, tipo: "seleccion" },
+    }));
+  }
+
+  function selectNoAsiste(minutaId: string) {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setSelections(prev => ({
+      ...prev,
+      [minutaId]: { minutaId, opcionSeleccionada: 0, tipo: "no_asiste" },
+    }));
+  }
+
+  function toggleMinuta(minutaId: string) {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    setExpandedMinuta(prev => prev === minutaId ? null : minutaId);
+  }
+
+  function handleSubmitWeek() {
+    const selArray = Object.values(selections);
+    if (selArray.length === 0) {
+      Alert.alert("Atención", "Selecciona al menos una opción antes de enviar.");
+      return;
+    }
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    }
+    submitWeek.mutate(selArray);
+  }
+
+  function getDayStatus(minuta: Minuta): "registered" | "selected" | "no_asiste" | "pending" {
+    const pedido = pedidoByMinuta[minuta.id];
+    if (pedido) {
+      if (pedido.opcionSeleccionada === 0) return "no_asiste";
+      return "registered";
+    }
+    const sel = selections[minuta.id];
+    if (sel) {
+      if (sel.tipo === "no_asiste") return "no_asiste";
+      return "selected";
+    }
+    return "pending";
+  }
+
+  function getStatusColor(status: string) {
+    switch (status) {
+      case "registered": return "#22C55E";
+      case "selected": return "#86EFAC";
+      case "no_asiste": return "#F97316";
+      case "pending": return Colors.border;
+      default: return Colors.border;
+    }
+  }
+
+  function getStatusLabel(status: string) {
+    switch (status) {
+      case "registered": return "Inscrito";
+      case "selected": return "Seleccionado";
+      case "no_asiste": return "No asiste";
+      case "pending": return "Pendiente";
+      default: return "";
+    }
+  }
+
+  const pendingSelections = Object.keys(selections).length;
+  const isInterlocutor = user?.role === "interlocutor";
 
   return (
     <View
@@ -218,15 +214,9 @@ export default function HomeScreen() {
             resizeMode="contain"
           />
           <View>
-            <Text style={styles.greeting}>
-              Hola, {user?.nombre}
-            </Text>
+            <Text style={styles.greeting}>Hola, {user?.nombre}</Text>
             <Text style={styles.roleTag}>
-              {user?.role === "admin"
-                ? "Administrador"
-                : user?.role === "interlocutor"
-                  ? "Interlocutor"
-                  : "Comensal"}
+              {user?.role === "admin" ? "Administrador" : user?.role === "interlocutor" ? "Interlocutor" : "Comensal"}
             </Text>
           </View>
         </View>
@@ -236,12 +226,8 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.sectionHeader}>
-        <MaterialCommunityIcons
-          name="silverware-fork-knife"
-          size={22}
-          color={Colors.primary}
-        />
-        <Text style={styles.sectionTitle}>Minutas de la Semana</Text>
+        <MaterialCommunityIcons name="silverware-fork-knife" size={22} color={Colors.primary} />
+        <Text style={styles.sectionTitle}>Inscripción Semanal</Text>
       </View>
 
       {isLoading ? (
@@ -251,44 +237,153 @@ export default function HomeScreen() {
         </View>
       ) : !user?.casinoId ? (
         <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons
-            name="alert-circle-outline"
-            size={48}
-            color={Colors.textMuted}
-          />
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color={Colors.textMuted} />
           <Text style={styles.emptyTitle}>Sin casino asignado</Text>
-          <Text style={styles.emptyText}>
-            Contacta a tu administrador para ser asignado a un casino
-          </Text>
+          <Text style={styles.emptyText}>Contacta a tu administrador para ser asignado a un casino</Text>
         </View>
       ) : sortedMinutas.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <MaterialCommunityIcons
-            name="food-off"
-            size={48}
-            color={Colors.textMuted}
-          />
+          <MaterialCommunityIcons name="food-off" size={48} color={Colors.textMuted} />
           <Text style={styles.emptyTitle}>Sin minutas disponibles</Text>
-          <Text style={styles.emptyText}>
-            No hay menús programados para esta semana
-          </Text>
+          <Text style={styles.emptyText}>No hay menús programados para esta semana</Text>
         </View>
       ) : (
-        <FlatList
-          data={sortedMinutas}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <MinutaCard item={item} />}
+        <ScrollView
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={refetch}
-              tintColor={Colors.primary}
-            />
-          }
-          scrollEnabled={sortedMinutas.length > 0}
-        />
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.primary} />}
+        >
+          {sortedMinutas.map((minuta) => {
+            const d = new Date(minuta.fecha + "T12:00:00");
+            const dayName = DAYS_ES[d.getDay()];
+            const dayShort = DAYS_SHORT[d.getDay()];
+            const dayNum = d.getDate();
+            const month = MONTHS_ES[d.getMonth()];
+            const status = getDayStatus(minuta);
+            const statusColor = getStatusColor(status);
+            const isExpanded = expandedMinuta === minuta.id;
+            const pedido = pedidoByMinuta[minuta.id];
+            const sel = selections[minuta.id];
+            const options = getOptions(minuta);
+            const isToday = new Date().toISOString().split("T")[0] === minuta.fecha;
+            const alreadyRegistered = !!pedido;
+
+            return (
+              <View key={minuta.id} style={styles.dayCard}>
+                <Pressable
+                  onPress={() => !alreadyRegistered && toggleMinuta(minuta.id)}
+                  style={[
+                    styles.dayHeader,
+                    { borderLeftColor: statusColor, borderLeftWidth: 4 },
+                    isToday && styles.dayHeaderToday,
+                  ]}
+                >
+                  <View style={styles.dayHeaderLeft}>
+                    <View style={styles.dayDateCol}>
+                      <Text style={[styles.dayShortText, isToday && { color: Colors.primary }]}>{dayShort}</Text>
+                      <Text style={[styles.dayNumText, isToday && { color: Colors.primary }]}>{dayNum}</Text>
+                      <Text style={styles.dayMonthText}>{month}</Text>
+                    </View>
+                    <View style={styles.dayInfoCol}>
+                      <Text style={styles.dayNameText}>{dayName}</Text>
+                      <Text style={[styles.famText]}>{minuta.familia || "Almuerzo"}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.dayHeaderRight}>
+                    <View style={[styles.statusBadge, { backgroundColor: statusColor + "22" }]}>
+                      <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                      <Text style={[styles.statusText, { color: statusColor }]}>{getStatusLabel(status)}</Text>
+                    </View>
+                    {!alreadyRegistered && (
+                      <Feather name={isExpanded ? "chevron-up" : "chevron-down"} size={20} color={Colors.textMuted} />
+                    )}
+                  </View>
+                </Pressable>
+
+                {isExpanded && !alreadyRegistered && (
+                  <View style={styles.dayBody}>
+                    <Text style={styles.selectLabel}>Selecciona tu opción:</Text>
+                    {options.map(opt => {
+                      const isSelected = sel?.tipo === "seleccion" && sel?.opcionSeleccionada === opt.number;
+                      return (
+                        <Pressable
+                          key={opt.number}
+                          onPress={() => selectOption(minuta.id, opt.number)}
+                          style={[styles.optionCard, isSelected && styles.optionCardSelected]}
+                        >
+                          <View style={[styles.optionNum, isSelected && styles.optionNumSelected]}>
+                            <Text style={[styles.optionNumText, isSelected && { color: "#FFF" }]}>{opt.number}</Text>
+                          </View>
+                          <Text style={[styles.optionText, isSelected && styles.optionTextSelected]} numberOfLines={2}>
+                            {opt.text}
+                          </Text>
+                          {isSelected && <Feather name="check-circle" size={20} color="#22C55E" />}
+                        </Pressable>
+                      );
+                    })}
+                    <Pressable
+                      onPress={() => selectNoAsiste(minuta.id)}
+                      style={[styles.noAsisteBtn, sel?.tipo === "no_asiste" && styles.noAsisteBtnActive]}
+                    >
+                      <Feather name="x-circle" size={18} color={sel?.tipo === "no_asiste" ? "#FFF" : "#F97316"} />
+                      <Text style={[styles.noAsisteBtnText, sel?.tipo === "no_asiste" && { color: "#FFF" }]}>
+                        No asisto este día
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {alreadyRegistered && (
+                  <View style={styles.registeredInfo}>
+                    {pedido.opcionSeleccionada === 0 ? (
+                      <Text style={styles.registeredText}>No asistirás este día</Text>
+                    ) : (
+                      <Pressable
+                        onPress={() => router.push({ pathname: "/(main)/minuta-detail", params: { id: minuta.id, fecha: minuta.fecha } })}
+                        style={styles.registeredRow}
+                      >
+                        <Text style={styles.registeredText}>
+                          Opción {pedido.opcionSeleccionada} seleccionada
+                        </Text>
+                        <Text style={styles.verValeText}>Ver vale →</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          {isInterlocutor && (
+            <Pressable
+              onPress={() => router.push("/(main)/vale-visita" as any)}
+              style={styles.visitaBtnContainer}
+            >
+              <MaterialCommunityIcons name="account-plus" size={22} color={Colors.primary} />
+              <Text style={styles.visitaBtnText}>Emitir Vale de Visita</Text>
+              <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+            </Pressable>
+          )}
+
+          {pendingSelections > 0 && (
+            <Pressable
+              onPress={handleSubmitWeek}
+              style={[styles.submitBtn, submitWeek.isPending && { opacity: 0.6 }]}
+              disabled={submitWeek.isPending}
+            >
+              {submitWeek.isPending ? (
+                <ActivityIndicator color="#FFF" />
+              ) : (
+                <>
+                  <Feather name="check" size={20} color="#FFF" />
+                  <Text style={styles.submitBtnText}>
+                    Confirmar Inscripción ({pendingSelections} {pendingSelections === 1 ? "día" : "días"})
+                  </Text>
+                </>
+              )}
+            </Pressable>
+          )}
+        </ScrollView>
       )}
     </View>
   );
@@ -344,131 +439,216 @@ const styles = StyleSheet.create({
     color: Colors.text,
   },
   listContent: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 14,
+    paddingHorizontal: 16,
+    paddingBottom: 30,
+    gap: 10,
   },
-  minutaCard: {
-    flexDirection: "row",
+  dayCard: {
     backgroundColor: Colors.cardBg,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Colors.border,
     overflow: "hidden",
   },
-  minutaCardToday: {
-    borderColor: Colors.primary,
-    borderWidth: 1.5,
-  },
-  minutaCardPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  dateColumn: {
-    width: 72,
+  dayHeader: {
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 16,
-    backgroundColor: "rgba(255,255,255,0.03)",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    paddingLeft: 16,
   },
-  dateColumnToday: {
-    backgroundColor: "rgba(212, 168, 67, 0.15)",
+  dayHeaderToday: {
+    backgroundColor: "rgba(212, 168, 67, 0.06)",
   },
-  dayText: {
+  dayHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  dayDateCol: {
+    alignItems: "center",
+    width: 42,
+  },
+  dayShortText: {
     fontFamily: "Poppins_500Medium",
-    fontSize: 11,
+    fontSize: 10,
     color: Colors.textMuted,
     textTransform: "uppercase",
   },
-  dayTextToday: {
-    color: Colors.primary,
-  },
-  dateNum: {
+  dayNumText: {
     fontFamily: "Poppins_700Bold",
-    fontSize: 28,
+    fontSize: 22,
     color: Colors.text,
-    lineHeight: 34,
+    lineHeight: 26,
   },
-  dateNumToday: {
-    color: Colors.primary,
+  dayMonthText: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 10,
+    color: Colors.textMuted,
   },
-  monthText: {
-    fontFamily: "Poppins_500Medium",
+  dayInfoCol: {
+    gap: 2,
+  },
+  dayNameText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    color: Colors.text,
+  },
+  famText: {
+    fontFamily: "Poppins_400Regular",
     fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  monthTextToday: {
     color: Colors.primaryLight,
   },
-  menuContent: {
-    flex: 1,
-    padding: 14,
-    gap: 8,
-  },
-  menuHeader: {
+  dayHeaderRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 10,
   },
-  familiaBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  familiaBadgeText: {
-    fontFamily: "Poppins_600SemiBold",
-    fontSize: 10,
-    letterSpacing: 0.5,
-  },
-  todayBadge: {
-    backgroundColor: Colors.primary,
+  statusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 6,
+    paddingVertical: 4,
+    borderRadius: 8,
   },
-  todayBadgeText: {
-    fontFamily: "Poppins_700Bold",
-    fontSize: 10,
-    color: "#FFFFFF",
-    letterSpacing: 1,
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
-  optionsList: {
-    gap: 5,
+  statusText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 11,
   },
-  optionRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  dayBody: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
     gap: 8,
   },
-  optionNumber: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  selectLabel: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginBottom: 4,
+  },
+  optionCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  optionCardSelected: {
+    borderColor: "#22C55E",
+    backgroundColor: "rgba(34, 197, 94, 0.08)",
+  },
+  optionNum: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "rgba(212, 168, 67, 0.2)",
     alignItems: "center",
     justifyContent: "center",
   },
-  optionNumberText: {
+  optionNumSelected: {
+    backgroundColor: "#22C55E",
+  },
+  optionNumText: {
     fontFamily: "Poppins_600SemiBold",
-    fontSize: 10,
+    fontSize: 12,
     color: Colors.primary,
   },
   optionText: {
     fontFamily: "Poppins_400Regular",
-    fontSize: 13,
+    fontSize: 14,
     color: Colors.textSecondary,
     flex: 1,
   },
-  menuFooter: {
+  optionTextSelected: {
+    color: Colors.text,
+    fontFamily: "Poppins_500Medium",
+  },
+  noAsisteBtn: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 4,
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#F9731640",
+    backgroundColor: "rgba(249, 115, 22, 0.05)",
   },
-  optionCountText: {
+  noAsisteBtnActive: {
+    backgroundColor: "#F97316",
+    borderColor: "#F97316",
+  },
+  noAsisteBtnText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 13,
+    color: "#F97316",
+  },
+  registeredInfo: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+  },
+  registeredRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  registeredText: {
     fontFamily: "Poppins_400Regular",
-    fontSize: 11,
-    color: Colors.textMuted,
+    fontSize: 13,
+    color: Colors.textSecondary,
+  },
+  verValeText: {
+    fontFamily: "Poppins_500Medium",
+    fontSize: 13,
+    color: Colors.primary,
+  },
+  visitaBtnContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    backgroundColor: Colors.cardBg,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  visitaBtnText: {
+    flex: 1,
+    fontFamily: "Poppins_500Medium",
+    fontSize: 15,
+    color: Colors.text,
+  },
+  submitBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#22C55E",
+    paddingVertical: 16,
+    borderRadius: 14,
+    marginTop: 6,
+  },
+  submitBtnText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 16,
+    color: "#FFFFFF",
   },
   loadingContainer: {
     flex: 1,

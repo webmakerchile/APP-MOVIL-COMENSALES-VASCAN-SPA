@@ -108,7 +108,7 @@
         <div>
           <label className="block text-sm font-medium text-white/70 mb-1.5">{label}</label>
           <select value={value} onChange={e => onChange(e.target.value)}
-            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
+            className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm" style={{colorScheme: 'dark'}}>
             {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
@@ -781,11 +781,11 @@
           <div className="bg-vascan-surface rounded-2xl border border-white/10 p-4 mb-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <select value={selectedCasino} onChange={e => handleCasinoChange(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm" style={{colorScheme: 'dark'}}>
                 {casinos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select>
               <select value={filterFamilia} onChange={e => setFilterFamilia(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm" style={{colorScheme: 'dark'}}>
                 <option value="">Todas las familias</option>
                 {familiasList.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
               </select>
@@ -841,7 +841,7 @@
               <div>
                 <label className="block text-sm font-medium text-white/60 mb-1.5">Familia</label>
                 <select value={form.familia} onChange={e => setForm({...form, familia: e.target.value})}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm">
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-vascan-gold/50 transition text-sm" style={{colorScheme: 'dark'}}>
                   {familiasList.map(f => <option key={f.id} value={f.nombre}>{f.nombre}</option>)}
                 </select>
               </div>
@@ -1241,12 +1241,15 @@
             </button>
           </div>
 
-          <div className="mb-4">
-            <select value={selectedCasino} onChange={e => setSelectedCasino(e.target.value)}
-              className="bg-vascan-dark border border-white/10 text-white rounded-xl px-4 py-2.5 text-sm">
-              {casinos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-          </div>
+          {casinos.length > 0 && (
+            <div className="mb-4">
+              <select value={selectedCasino} onChange={e => setSelectedCasino(e.target.value)}
+                className="bg-vascan-dark border border-white/10 text-white rounded-xl px-4 py-2.5 text-sm appearance-none cursor-pointer" style={{colorScheme: 'dark'}}>
+                <option value="">Todos los casinos</option>
+                {casinos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+              </select>
+            </div>
+          )}
 
           {filtered.length === 0 ? (
             <div className="text-center py-16 text-white/40">
@@ -1316,7 +1319,7 @@
                     <div>
                       <label className="block text-sm font-medium text-white/60 mb-1">Casino</label>
                       <select value={form.casinoId} onChange={e => setForm({...form, casinoId: e.target.value})}
-                        className="w-full bg-vascan-dark border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm">
+                        className="w-full bg-vascan-dark border border-white/10 rounded-xl px-4 py-2.5 text-white text-sm" style={{colorScheme: 'dark'}}>
                         {casinos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                       </select>
                     </div>

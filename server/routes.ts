@@ -35,6 +35,23 @@ async function ensureSuperAdmin() {
   } catch (err) {
     console.error("Super admin init error:", err);
   }
+  try {
+    const oliver = await storage.getUserByRut("olivervasquez");
+    if (!oliver) {
+      const hashed = await bcrypt.hash("6676", 10);
+      await storage.createUser({
+        rut: "olivervasquez",
+        password: hashed,
+        nombre: "Oliver",
+        apellido: "Vasquez",
+        role: "admin",
+        casinoId: null,
+      });
+      console.log("Oliver admin created.");
+    }
+  } catch (err) {
+    console.error("Oliver admin init error:", err);
+  }
 }
 
 function requireAdmin(req: Request, res: Response, next: Function) {

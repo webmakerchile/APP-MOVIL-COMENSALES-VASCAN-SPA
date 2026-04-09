@@ -993,6 +993,17 @@ async function registerRoutes(app2) {
       return res.status(500).json({ message: "Error interno del servidor" });
     }
   });
+  app2.get("/api/periodo-activo/:casinoId", async (req, res) => {
+    try {
+      const { casinoId } = req.params;
+      const periodosList = await storage.getPeriodosByCasino(casinoId);
+      const now = /* @__PURE__ */ new Date();
+      const activo = periodosList.find((p) => p.activo && new Date(p.fechaInicio) <= now && new Date(p.fechaFin) >= now);
+      return res.json({ activo: !!activo, periodo: activo || null });
+    } catch (error) {
+      return res.status(500).json({ message: "Error al verificar periodo" });
+    }
+  });
   app2.post("/api/pedidos/semanal", async (req, res) => {
     try {
       const { userId, selecciones } = req.body;
@@ -1001,6 +1012,14 @@ async function registerRoutes(app2) {
       }
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+      if (user.casinoId) {
+        const periodosList = await storage.getPeriodosByCasino(user.casinoId);
+        const now = /* @__PURE__ */ new Date();
+        const periodoActivo = periodosList.find((p) => p.activo && new Date(p.fechaInicio) <= now && new Date(p.fechaFin) >= now);
+        if (!periodoActivo) {
+          return res.status(403).json({ message: "No hay un periodo de inscripci\xF3n activo. Contacta a tu administrador." });
+        }
+      }
       const results = [];
       for (const sel of selecciones) {
         const { minutaId, opcionSeleccionada, tipo } = sel;

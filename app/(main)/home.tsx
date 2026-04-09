@@ -75,6 +75,13 @@ export default function HomeScreen() {
     enabled: !!user?.casinoId,
   });
 
+  const { data: periodoData } = useQuery<{ activo: boolean; periodo: any }>({
+    queryKey: ["/api/periodo-activo", user?.casinoId ?? "none"],
+    enabled: !!user?.casinoId,
+  });
+
+  const periodoActivo = periodoData?.activo ?? false;
+
   const { data: pedidos } = useQuery<Pedido[]>({
     queryKey: ["/api/pedidos", user?.id ?? "none"],
     enabled: !!user?.id,
@@ -96,8 +103,9 @@ export default function HomeScreen() {
       }
       Alert.alert("Listo", "Tu inscripción semanal fue registrada correctamente.");
     },
-    onError: () => {
-      Alert.alert("Error", "Hubo un problema al registrar tu inscripción.");
+    onError: (err: any) => {
+      const msg = err?.message || "Hubo un problema al registrar tu inscripción.";
+      Alert.alert("Error", msg);
     },
   });
 
@@ -148,6 +156,10 @@ export default function HomeScreen() {
   }
 
   function handleSubmitWeek() {
+    if (!periodoActivo) {
+      Alert.alert("Inscripción cerrada", "No hay un periodo de inscripción activo en este momento. Contacta a tu administrador.");
+      return;
+    }
     const selArray = Object.values(selections);
     if (selArray.length === 0) {
       Alert.alert("Atención", "Selecciona al menos una opción antes de enviar.");
@@ -253,6 +265,12 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={Colors.primary} />}
         >
+          {!periodoActivo && (
+            <View style={styles.periodoBanner}>
+              <MaterialCommunityIcons name="clock-alert-outline" size={20} color="#f59e0b" />
+              <Text style={styles.periodoBannerText}>El periodo de inscripción no está activo. Solo puedes ver el menú.</Text>
+            </View>
+          )}
           {sortedMinutas.map((minuta) => {
             const d = new Date(minuta.fecha + "T12:00:00");
             const dayName = DAYS_ES[d.getDay()];
@@ -437,6 +455,25 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     fontSize: 18,
     color: Colors.text,
+  },
+  periodoBanner: {
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: 10,
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+  },
+  periodoBannerText: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 13,
+    color: "#f59e0b",
+    flex: 1,
   },
   listContent: {
     paddingHorizontal: 16,

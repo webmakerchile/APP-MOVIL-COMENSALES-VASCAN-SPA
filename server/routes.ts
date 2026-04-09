@@ -805,6 +805,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/periodo-activo/:casinoId", async (req: Request, res: Response) => {
+    try {
+      const { casinoId } = req.params;
+      const periodosList = await storage.getPeriodosByCasino(casinoId);
+      const now = new Date();
+      const activo = periodosList.find(p => p.activo && new Date(p.fechaInicio) <= now && new Date(p.fechaFin) >= now);
+      return res.json({ activo: !!activo, periodo: activo || null });
+    } catch (error) {
+      return res.status(500).json({ message: "Error al verificar periodo" });
+    }
+  });
+
   app.post("/api/pedidos/semanal", async (req: Request, res: Response) => {
     try {
       const { userId, selecciones } = req.body;
@@ -814,6 +826,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "Usuario no encontrado" });
+
+      if (user.casinoId) {
+        const periodosList = await storage.getPeriodosByCasino(user.casinoId);
+        const now = new Date();
+        const periodoActivo = periodosList.find(p => p.activo && new Date(p.fechaInicio) <= now && new Date(p.fechaFin) >= now);
+        if (!periodoActivo) {
+          return res.status(403).json({ message: "No hay un periodo de inscripción activo. Contacta a tu administrador." });
+        }
+      }
 
       const results: any[] = [];
       for (const sel of selecciones) {

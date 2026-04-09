@@ -965,7 +965,16 @@
               </div>
               {!editItem && (
                 <div>
-                  <label className="block text-sm font-medium text-white/60 mb-1.5">Casinos (seleccione uno o más)</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-medium text-white/60">Casinos (seleccione uno o más)</label>
+                    <button type="button" onClick={() => {
+                      const allIds = casinos.map(c => c.id);
+                      const allSelected = allIds.every(id => form.casinoIds.includes(id));
+                      setForm({...form, casinoIds: allSelected ? [] : allIds});
+                    }} className="text-xs font-medium text-vascan-gold hover:text-vascan-gold/80 transition px-2 py-0.5 rounded-lg bg-vascan-gold/10 hover:bg-vascan-gold/20">
+                      {casinos.every(c => form.casinoIds.includes(c.id)) ? 'Ninguno' : 'Todos'}
+                    </button>
+                  </div>
                   <div className="space-y-2 max-h-36 overflow-y-auto bg-white/5 rounded-xl p-3 border border-white/10">
                     {casinos.map(c => (
                       <label key={c.id} className="flex items-center gap-3 cursor-pointer hover:bg-white/5 rounded-lg px-2 py-1.5 transition">
@@ -1002,7 +1011,16 @@
               )}
               <InputField label="Nueva fecha (dejar vacío para mantener)" value={cloneForm.fecha} onChange={v => setCloneForm({...cloneForm, fecha: v})} type="date" />
               <div>
-                <label className="block text-sm font-medium text-white/60 mb-1.5">Casinos destino</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-sm font-medium text-white/60">Casinos destino</label>
+                  <button type="button" onClick={() => {
+                    const allIds = casinos.map(c => c.id);
+                    const allSelected = allIds.every(id => cloneForm.casinoIds.includes(id));
+                    setCloneForm({...cloneForm, casinoIds: allSelected ? [] : allIds});
+                  }} className="text-xs font-medium text-vascan-gold hover:text-vascan-gold/80 transition px-2 py-0.5 rounded-lg bg-vascan-gold/10 hover:bg-vascan-gold/20">
+                    {casinos.every(c => cloneForm.casinoIds.includes(c.id)) ? 'Ninguno' : 'Todos'}
+                  </button>
+                </div>
                 <div className="space-y-2 max-h-36 overflow-y-auto bg-white/5 rounded-xl p-3 border border-white/10">
                   {casinos.map(c => (
                     <label key={c.id} className="flex items-center gap-3 cursor-pointer hover:bg-white/5 rounded-lg px-2 py-1.5 transition">

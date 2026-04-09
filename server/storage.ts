@@ -151,6 +151,10 @@ export class DatabaseStorage implements IStorage {
     return !!minuta;
   }
 
+  async getAllPedidos(): Promise<Pedido[]> {
+    return db.select().from(pedidos);
+  }
+
   async getPedidosByUser(userId: string): Promise<Pedido[]> {
     return db.select().from(pedidos).where(eq(pedidos.userId, userId));
   }

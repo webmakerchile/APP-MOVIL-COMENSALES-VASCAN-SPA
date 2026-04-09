@@ -14,7 +14,7 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 
 ## Data Model
 - **Users**: Authenticated via Chilean RUT + password. Roles: admin, comensal, interlocutor
-- **Casinos**: Dining locations/venues  
+- **Casinos**: Dining locations/venues with `comensalesDiarios` (expected daily diners) for participation tracking  
 - **Minutas**: Daily menus with up to 5 options per date per casino. Each has a `familia` field linked to dynamic Familias table
 - **Familias**: Dynamic categories for minutas (Almuerzo, Desayuno, Colación, VIP, etc.) with custom colors. Admin CRUD via `/api/familias`
 - **Pedidos**: Meal orders linking users to their selected menu option. Has `tipo` field (seleccion, no_asiste, visita) and optional `nombreVisita` for visitor vouchers

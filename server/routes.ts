@@ -423,11 +423,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/casinos/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { nombre, direccion, activo } = req.body;
+      const { nombre, direccion, activo, comensalesDiarios } = req.body;
       const updateData: any = {};
       if (nombre !== undefined) updateData.nombre = nombre;
       if (direccion !== undefined) updateData.direccion = direccion;
       if (activo !== undefined) updateData.activo = activo;
+      if (comensalesDiarios !== undefined) updateData.comensalesDiarios = parseInt(comensalesDiarios) || 0;
 
       const casino = await storage.updateCasino(id, updateData);
       if (!casino) {
@@ -479,6 +480,87 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Delete casino error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  // ── Dashboard Stats ──
+  app.get("/api/dashboard/stats", requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const allCasinos = await storage.getCasinos();
+      const activeCasinos = allCasinos.filter(c => c.activo);
+      const allUsers = await storage.getUsers();
+      const allPedidos = await storage.getAllPedidos();
+      const allMinutas = await storage.getAllMinutas();
+
+      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() + mondayOffset);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const weekStart = monday.toISOString().split('T')[0];
+      const weekEnd = sunday.toISOString().split('T')[0];
+
+      const casinoStats = activeCasinos.map(casino => {
+        const casinoUsers = allUsers.filter(u => u.casinoId === casino.id && u.activo && u.role === 'comensal');
+        const totalComensales = casinoUsers.length;
+        const esperados = casino.comensalesDiarios || totalComensales;
+
+        const todayMinutas = allMinutas.filter(m => m.casinoId === casino.id && m.fecha === today && m.activo);
+        const todayMinutaIds = todayMinutas.map(m => m.id);
+        const todayPedidos = allPedidos.filter(p => todayMinutaIds.includes(p.minutaId));
+        const inscritosHoy = new Set(todayPedidos.map(p => p.userId)).size;
+
+        const weekMinutas = allMinutas.filter(m => m.casinoId === casino.id && m.fecha >= weekStart && m.fecha <= weekEnd && m.activo);
+        const weekMinutaIds = weekMinutas.map(m => m.id);
+        const weekPedidos = allPedidos.filter(p => weekMinutaIds.includes(p.minutaId));
+        const inscritosSemana = new Set(weekPedidos.map(p => p.userId)).size;
+
+        const weekDates = [...new Set(weekMinutas.map(m => m.fecha))].sort();
+        const dailyBreakdown = weekDates.map(fecha => {
+          const dayMinutas = weekMinutas.filter(m => m.fecha === fecha);
+          const dayMinutaIds = dayMinutas.map(m => m.id);
+          const dayPedidos = allPedidos.filter(p => dayMinutaIds.includes(p.minutaId));
+          const inscritos = new Set(dayPedidos.map(p => p.userId)).size;
+          return { fecha, inscritos, esperados, porcentaje: esperados > 0 ? Math.round((inscritos / esperados) * 100) : 0 };
+        });
+
+        const porcentajeHoy = esperados > 0 ? Math.round((inscritosHoy / esperados) * 100) : 0;
+        const porcentajeSemana = esperados > 0 ? Math.round((inscritosSemana / esperados) * 100) : 0;
+
+        return {
+          casinoId: casino.id,
+          casinoNombre: casino.nombre,
+          totalComensales,
+          comensalesDiarios: esperados,
+          inscritosHoy,
+          porcentajeHoy,
+          inscritosSemana,
+          porcentajeSemana,
+          estado: porcentajeHoy >= 80 ? 'bueno' : porcentajeHoy >= 50 ? 'regular' : 'bajo',
+          dailyBreakdown
+        };
+      });
+
+      const totalEsperados = activeCasinos.reduce((sum, c) => sum + (c.comensalesDiarios || 0), 0);
+      const totalInscritosHoy = casinoStats.reduce((sum, s) => sum + s.inscritosHoy, 0);
+      const totalComensalesRegistrados = allUsers.filter(u => u.role === 'comensal' && u.activo).length;
+
+      return res.json({
+        resumen: {
+          totalCasinos: activeCasinos.length,
+          totalComensalesRegistrados,
+          totalEsperados,
+          totalInscritosHoy,
+          porcentajeGlobal: totalEsperados > 0 ? Math.round((totalInscritosHoy / totalEsperados) * 100) : 0
+        },
+        casinos: casinoStats
+      });
+    } catch (error) {
+      console.error("Dashboard stats error:", error);
+      return res.status(500).json({ message: "Error al obtener estadísticas" });
     }
   });
 

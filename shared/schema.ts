@@ -38,6 +38,7 @@ export const casinos = pgTable("casinos", {
     .default(sql`gen_random_uuid()`),
   nombre: text("nombre").notNull(),
   direccion: text("direccion"),
+  comensalesDiarios: integer("comensales_diarios").notNull().default(0),
   activo: boolean("activo").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -121,6 +122,7 @@ export const loginSchema = z.object({
 export const insertCasinoSchema = createInsertSchema(casinos).pick({
   nombre: true,
   direccion: true,
+  comensalesDiarios: true,
 });
 
 export const insertFamiliaSchema = createInsertSchema(familias).pick({

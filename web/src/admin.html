@@ -271,45 +271,179 @@
 
     // ── Dashboard ──
     function DashboardView() {
-      const [stats, setStats] = useState(null);
-      const [pedidoStats, setPedidoStats] = useState(null);
+      const [data, setData] = useState(null);
+      const [basicStats, setBasicStats] = useState(null);
       const [loading, setLoading] = useState(true);
 
       useEffect(() => {
         Promise.all([
-          apiFetch('/api/casinos'),
-          apiFetch('/api/usuarios'),
-          apiFetch('/api/minutas'),
-          apiFetch('/api/reportes/dashboard').catch(() => null),
+          apiFetch('/api/dashboard/stats').catch(() => null),
+          Promise.all([apiFetch('/api/casinos'), apiFetch('/api/usuarios'), apiFetch('/api/minutas')]).then(([c, u, m]) => ({ casinos: c.length, usuarios: u.length, minutas: m.length }))
         ])
-          .then(([c, u, m, ps]) => {
-            setStats({ casinos: c.length, usuarios: u.length, minutas: m.length });
-            if (ps) setPedidoStats(ps);
-          })
+          .then(([dashData, basic]) => { setData(dashData); setBasicStats(basic); })
           .catch(console.error)
           .finally(() => setLoading(false));
       }, []);
 
       if (loading) return <LoadingSpinner />;
 
+      const dayNames = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 0: 'Dom' };
+      function formatFecha(f) {
+        const d = new Date(f + 'T12:00:00');
+        const day = dayNames[d.getDay()] || '';
+        return `${day} ${d.getDate()}/${d.getMonth()+1}`;
+      }
+
+      function getBarColor(pct) {
+        if (pct >= 80) return 'bg-green-500';
+        if (pct >= 50) return 'bg-yellow-500';
+        return 'bg-red-500';
+      }
+
+      function getStatusBadge(estado) {
+        const map = {
+          bueno: { bg: 'bg-green-500/20', text: 'text-green-400', label: 'Bueno' },
+          regular: { bg: 'bg-yellow-500/20', text: 'text-yellow-400', label: 'Regular' },
+          bajo: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Bajo' }
+        };
+        const s = map[estado] || map.bajo;
+        return <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${s.bg} ${s.text}`}>{s.label}</span>;
+      }
+
+      const resumen = data?.resumen || {};
+      const casinoStats = data?.casinos || [];
+      const globalPct = resumen.porcentajeGlobal || 0;
+
       return (
         <div className="fade-in">
-          <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <StatCard title="Usuarios" value={stats?.usuarios || 0} icon="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            <StatCard title="Casinos" value={stats?.casinos || 0} icon="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-            <StatCard title="Minutas" value={stats?.minutas || 0} icon="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-          </div>
-          {pedidoStats && (
-            <>
-              <h2 className="text-lg font-semibold mb-3 text-white/80">Inscripciones</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <StatCard title="Inscripciones" value={pedidoStats.totalInscripciones} icon="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" color="text-green-400" bgColor="bg-green-500/15" />
-                <StatCard title="No Asisten" value={pedidoStats.totalNoAsiste} icon="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" color="text-orange-400" bgColor="bg-orange-500/15" />
-                <StatCard title="Vales de Visita" value={pedidoStats.totalVisitas} icon="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" color="text-blue-400" bgColor="bg-blue-500/15" />
+          <h1 className="text-2xl font-bold mb-6">Dashboard de Inscripciones</h1>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+            <StatCard title="Casinos Activos" value={resumen.totalCasinos || basicStats?.casinos || 0} icon="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            <StatCard title="Comensales Registrados" value={resumen.totalComensalesRegistrados || basicStats?.usuarios || 0} icon="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+            <StatCard title="Esperados Hoy" value={resumen.totalEsperados || 0} icon="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            <div className="bg-vascan-surface rounded-2xl border border-white/10 p-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${globalPct >= 80 ? 'bg-green-500/15' : globalPct >= 50 ? 'bg-yellow-500/15' : 'bg-red-500/15'}`}>
+                  <svg className={`w-5 h-5 ${globalPct >= 80 ? 'text-green-400' : globalPct >= 50 ? 'text-yellow-400' : 'text-red-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+                </div>
               </div>
-            </>
+              <p className="text-2xl font-bold">{resumen.totalInscritosHoy || 0} <span className="text-base font-normal text-white/40">/ {resumen.totalEsperados || 0}</span></p>
+              <p className="text-white/50 text-sm mt-0.5">Inscritos Hoy — <span className={`font-semibold ${globalPct >= 80 ? 'text-green-400' : globalPct >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{globalPct}%</span></p>
+              <div className="w-full bg-white/10 rounded-full h-2 mt-2">
+                <div className={`h-2 rounded-full transition-all ${getBarColor(globalPct)}`} style={{width: `${Math.min(globalPct, 100)}%`}}></div>
+              </div>
+            </div>
+          </div>
+
+          <h2 className="text-lg font-semibold mb-4 text-white/80">Detalle por Casino</h2>
+          {casinoStats.length === 0 && (
+            <div className="bg-vascan-surface rounded-2xl border border-white/10 p-8 text-center text-white/40">
+              <p>No hay casinos activos con comensales diarios configurados.</p>
+              <p className="text-sm mt-1">Configure "Comensales Diarios Esperados" en cada casino para ver las métricas.</p>
+            </div>
           )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            {casinoStats.map(cs => (
+              <div key={cs.casinoId} className="bg-vascan-surface rounded-2xl border border-white/10 p-5">
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="font-semibold text-lg">{cs.casinoNombre}</h3>
+                    <p className="text-white/40 text-sm">{cs.totalComensales} comensales registrados · {cs.comensalesDiarios} esperados/día</p>
+                  </div>
+                  {getStatusBadge(cs.estado)}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div className="bg-white/5 rounded-xl p-3">
+                    <p className="text-xs text-white/40 mb-1">Inscritos Hoy</p>
+                    <p className="text-xl font-bold">{cs.inscritosHoy} <span className="text-sm font-normal text-white/40">/ {cs.comensalesDiarios}</span></p>
+                    <div className="w-full bg-white/10 rounded-full h-1.5 mt-2">
+                      <div className={`h-1.5 rounded-full transition-all ${getBarColor(cs.porcentajeHoy)}`} style={{width: `${Math.min(cs.porcentajeHoy, 100)}%`}}></div>
+                    </div>
+                    <p className={`text-xs mt-1 font-semibold ${cs.porcentajeHoy >= 80 ? 'text-green-400' : cs.porcentajeHoy >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{cs.porcentajeHoy}%</p>
+                  </div>
+                  <div className="bg-white/5 rounded-xl p-3">
+                    <p className="text-xs text-white/40 mb-1">Inscritos Semana</p>
+                    <p className="text-xl font-bold">{cs.inscritosSemana} <span className="text-sm font-normal text-white/40">/ {cs.comensalesDiarios}</span></p>
+                    <div className="w-full bg-white/10 rounded-full h-1.5 mt-2">
+                      <div className={`h-1.5 rounded-full transition-all ${getBarColor(cs.porcentajeSemana)}`} style={{width: `${Math.min(cs.porcentajeSemana, 100)}%`}}></div>
+                    </div>
+                    <p className={`text-xs mt-1 font-semibold ${cs.porcentajeSemana >= 80 ? 'text-green-400' : cs.porcentajeSemana >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{cs.porcentajeSemana}%</p>
+                  </div>
+                </div>
+
+                {cs.dailyBreakdown.length > 0 && (
+                  <div>
+                    <p className="text-xs text-white/40 mb-2 font-medium">Desglose diario esta semana</p>
+                    <div className="flex items-end gap-1 h-20">
+                      {cs.dailyBreakdown.map(day => (
+                        <div key={day.fecha} className="flex-1 flex flex-col items-center gap-1">
+                          <span className="text-[10px] text-white/50 font-semibold">{day.inscritos}</span>
+                          <div className="w-full bg-white/10 rounded-sm relative" style={{height: '48px'}}>
+                            <div className={`absolute bottom-0 w-full rounded-sm transition-all ${getBarColor(day.porcentaje)}`} style={{height: `${Math.min(day.porcentaje, 100)}%`}}></div>
+                          </div>
+                          <span className="text-[9px] text-white/30">{formatFecha(day.fecha)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {cs.dailyBreakdown.length === 0 && (
+                  <p className="text-xs text-white/30 text-center py-2">Sin minutas activas esta semana</p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <h2 className="text-lg font-semibold mb-4 text-white/80">Resumen General</h2>
+          <div className="bg-vascan-surface rounded-2xl border border-white/10 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/10 text-white/50">
+                    <th className="text-left px-5 py-3">Casino</th>
+                    <th className="text-center px-5 py-3">Registrados</th>
+                    <th className="text-center px-5 py-3">Esperados/Día</th>
+                    <th className="text-center px-5 py-3">Inscritos Hoy</th>
+                    <th className="text-center px-5 py-3">% Hoy</th>
+                    <th className="text-center px-5 py-3">Inscritos Semana</th>
+                    <th className="text-center px-5 py-3">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {casinoStats.map(cs => (
+                    <tr key={cs.casinoId} className="border-b border-white/5 hover:bg-white/[0.02]">
+                      <td className="px-5 py-3 font-medium">{cs.casinoNombre}</td>
+                      <td className="px-5 py-3 text-center text-white/70">{cs.totalComensales}</td>
+                      <td className="px-5 py-3 text-center text-white/70">{cs.comensalesDiarios}</td>
+                      <td className="px-5 py-3 text-center font-semibold">{cs.inscritosHoy}</td>
+                      <td className="px-5 py-3 text-center">
+                        <span className={`font-semibold ${cs.porcentajeHoy >= 80 ? 'text-green-400' : cs.porcentajeHoy >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{cs.porcentajeHoy}%</span>
+                      </td>
+                      <td className="px-5 py-3 text-center text-white/70">{cs.inscritosSemana}</td>
+                      <td className="px-5 py-3 text-center">{getStatusBadge(cs.estado)}</td>
+                    </tr>
+                  ))}
+                  {casinoStats.length > 1 && (
+                    <tr className="border-t border-white/20 bg-white/[0.03] font-semibold">
+                      <td className="px-5 py-3">TOTAL</td>
+                      <td className="px-5 py-3 text-center">{resumen.totalComensalesRegistrados}</td>
+                      <td className="px-5 py-3 text-center">{resumen.totalEsperados}</td>
+                      <td className="px-5 py-3 text-center">{resumen.totalInscritosHoy}</td>
+                      <td className="px-5 py-3 text-center">
+                        <span className={`${globalPct >= 80 ? 'text-green-400' : globalPct >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>{globalPct}%</span>
+                      </td>
+                      <td className="px-5 py-3 text-center">—</td>
+                      <td className="px-5 py-3 text-center">—</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       );
     }
@@ -526,7 +660,7 @@
       const [editItem, setEditItem] = useState(null);
       const [deleteTarget, setDeleteTarget] = useState(null);
       const [toast, setToast] = useState(null);
-      const [form, setForm] = useState({ nombre: '', direccion: '' });
+      const [form, setForm] = useState({ nombre: '', direccion: '', comensalesDiarios: 0 });
 
       useEffect(() => { loadData(); }, []);
 
@@ -541,13 +675,13 @@
 
       function openCreate() {
         setEditItem(null);
-        setForm({ nombre: '', direccion: '' });
+        setForm({ nombre: '', direccion: '', comensalesDiarios: 0 });
         setShowModal(true);
       }
 
       function openEdit(c) {
         setEditItem(c);
-        setForm({ nombre: c.nombre, direccion: c.direccion || '' });
+        setForm({ nombre: c.nombre, direccion: c.direccion || '', comensalesDiarios: c.comensalesDiarios || 0 });
         setShowModal(true);
       }
 
@@ -615,6 +749,9 @@
                   <div>
                     <h3 className="font-semibold text-lg">{c.nombre}</h3>
                     <p className="text-white/40 text-sm mt-0.5">{c.direccion || 'Sin dirección'}</p>
+                    {c.comensalesDiarios > 0 && (
+                      <p className="text-vascan-gold/70 text-xs mt-1 font-medium">👥 {c.comensalesDiarios} comensales diarios esperados</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => toggleActive(c)} className={`px-2.5 py-1 rounded-full text-xs font-medium ${c.activo ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
@@ -652,6 +789,7 @@
             <form onSubmit={handleSave} className="space-y-4">
               <InputField label="Nombre" value={form.nombre} onChange={v => setForm({...form, nombre: v})} placeholder="Casino Central" required />
               <InputField label="Dirección" value={form.direccion} onChange={v => setForm({...form, direccion: v})} placeholder="Av. Principal 123" />
+              <InputField label="Comensales Diarios Esperados" value={form.comensalesDiarios} onChange={v => setForm({...form, comensalesDiarios: parseInt(v) || 0})} type="number" placeholder="Ej: 180" />
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-medium transition">Cancelar</button>
                 <button type="submit" className="px-5 py-2.5 rounded-xl bg-vascan-gold hover:bg-vascan-goldDark text-sm font-medium transition">

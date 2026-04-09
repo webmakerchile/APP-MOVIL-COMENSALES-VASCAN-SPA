@@ -148,6 +148,27 @@
       return formattedRut.replace(/\./g, '');
     }
 
+    function validarRutChileno(rutCompleto) {
+      const cleaned = rutCompleto.replace(/\./g, '').replace(/-/g, '').trim().toUpperCase();
+      if (cleaned.length < 2) return false;
+      const cuerpo = cleaned.slice(0, -1);
+      const dvIngresado = cleaned.slice(-1);
+      if (!/^\d+$/.test(cuerpo)) return false;
+      let suma = 0;
+      let multiplicador = 2;
+      for (let i = cuerpo.length - 1; i >= 0; i--) {
+        suma += parseInt(cuerpo[i]) * multiplicador;
+        multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+      }
+      const resto = suma % 11;
+      const dvCalculado = resto === 0 ? '0' : resto === 1 ? 'K' : String(11 - resto);
+      return dvIngresado === dvCalculado;
+    }
+
+    function looksLikeRut(val) {
+      return /\d/.test(val) && /^[\d.\-kK]+$/.test(val.trim());
+    }
+
     // ── Login Screen ──
     function LoginScreen({ onLogin }) {
       const [identifier, setIdentifier] = useState('');
@@ -351,7 +372,12 @@
             await apiFetch(`/api/usuarios/${editUser.id}`, { method: 'PUT', body: JSON.stringify(body) });
             setToast({ message: 'Usuario actualizado', type: 'success' });
           } else {
-            await apiFetch('/api/usuarios', { method: 'POST', body: JSON.stringify({...form, rut: cleanRut(form.rut)}) });
+            const rutLimpio = cleanRut(form.rut);
+            if (looksLikeRut(rutLimpio) && !validarRutChileno(rutLimpio)) {
+              setToast({ message: 'El RUT ingresado no es válido. Verifique el dígito verificador.', type: 'error' });
+              return;
+            }
+            await apiFetch('/api/usuarios', { method: 'POST', body: JSON.stringify({...form, rut: rutLimpio}) });
             setToast({ message: 'Usuario creado', type: 'success' });
           }
           setShowModal(false);

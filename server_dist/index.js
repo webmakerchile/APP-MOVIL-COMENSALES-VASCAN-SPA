@@ -300,6 +300,25 @@ var storage = new DatabaseStorage();
 var PgSession = connectPgSimple(session);
 var upload = multer({ dest: "/tmp/uploads/" });
 var SUPER_ADMIN_RUT = "21212011-1";
+function validarRutChileno(rutCompleto) {
+  const cleaned = rutCompleto.replace(/\./g, "").replace(/-/g, "").trim().toUpperCase();
+  if (cleaned.length < 2) return false;
+  const cuerpo = cleaned.slice(0, -1);
+  const dvIngresado = cleaned.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0;
+  let multiplicador = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += parseInt(cuerpo[i]) * multiplicador;
+    multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+  }
+  const resto = suma % 11;
+  const dvCalculado = resto === 0 ? "0" : resto === 1 ? "K" : String(11 - resto);
+  return dvIngresado === dvCalculado;
+}
+function looksLikeRut(val) {
+  return /\d/.test(val) && /^[\d.\-kK]+$/.test(val.trim());
+}
 async function ensureSuperAdmin() {
   try {
     const existing = await storage.getUserByRut(SUPER_ADMIN_RUT);
@@ -540,9 +559,12 @@ async function registerRoutes(app2) {
       if (!rut || !nombre || !apellido) {
         return res.status(400).json({ message: "RUT, nombre y apellido son requeridos" });
       }
+      if (looksLikeRut(rut) && !validarRutChileno(rut)) {
+        return res.status(400).json({ message: "El RUT ingresado no es v\xE1lido. Verifique el d\xEDgito verificador." });
+      }
       const existing = await storage.getUserByRut(rut);
       if (existing) {
-        return res.status(409).json({ message: "El RUT ya est\xE1 registrado" });
+        return res.status(409).json({ message: "El RUT ya est\xE1 registrado en el sistema" });
       }
       const defaultPwd = pwd || rut.replace(/[^0-9]/g, "").slice(0, 4) || "1234";
       const hashedPassword = await bcrypt.hash(defaultPwd, 10);
@@ -1096,6 +1118,11 @@ async function registerRoutes(app2) {
           const casinoRaw = String(row["Casino_ID"] || row["casino_id"] || row["CasinoID"] || row["CASINO"] || row["Casino"] || "").trim();
           if (!rut || !nombre) {
             errorDetails.push({ row: rowNum, error: "RUT o Nombre vac\xEDo" });
+            errors++;
+            continue;
+          }
+          if (looksLikeRut(rut) && !validarRutChileno(rut)) {
+            errorDetails.push({ row: rowNum, error: `RUT ${rut} inv\xE1lido \u2014 d\xEDgito verificador incorrecto` });
             errors++;
             continue;
           }

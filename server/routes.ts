@@ -17,6 +17,27 @@ const upload = multer({ dest: "/tmp/uploads/" });
 
 const SUPER_ADMIN_RUT = "21212011-1";
 
+function validarRutChileno(rutCompleto: string): boolean {
+  const cleaned = rutCompleto.replace(/\./g, "").replace(/-/g, "").trim().toUpperCase();
+  if (cleaned.length < 2) return false;
+  const cuerpo = cleaned.slice(0, -1);
+  const dvIngresado = cleaned.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0;
+  let multiplicador = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += parseInt(cuerpo[i]) * multiplicador;
+    multiplicador = multiplicador === 7 ? 2 : multiplicador + 1;
+  }
+  const resto = suma % 11;
+  const dvCalculado = resto === 0 ? "0" : resto === 1 ? "K" : String(11 - resto);
+  return dvIngresado === dvCalculado;
+}
+
+function looksLikeRut(val: string): boolean {
+  return /\d/.test(val) && /^[\d.\-kK]+$/.test(val.trim());
+}
+
 async function ensureSuperAdmin() {
   try {
     const existing = await storage.getUserByRut(SUPER_ADMIN_RUT);
@@ -296,9 +317,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "RUT, nombre y apellido son requeridos" });
       }
 
+      if (looksLikeRut(rut) && !validarRutChileno(rut)) {
+        return res.status(400).json({ message: "El RUT ingresado no es válido. Verifique el dígito verificador." });
+      }
+
       const existing = await storage.getUserByRut(rut);
       if (existing) {
-        return res.status(409).json({ message: "El RUT ya está registrado" });
+        return res.status(409).json({ message: "El RUT ya está registrado en el sistema" });
       }
 
       const defaultPwd = pwd || rut.replace(/[^0-9]/g, "").slice(0, 4) || "1234";
@@ -935,6 +960,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           if (!rut || !nombre) {
             errorDetails.push({ row: rowNum, error: "RUT o Nombre vacío" });
+            errors++;
+            continue;
+          }
+
+          if (looksLikeRut(rut) && !validarRutChileno(rut)) {
+            errorDetails.push({ row: rowNum, error: `RUT ${rut} inválido — dígito verificador incorrecto` });
             errors++;
             continue;
           }

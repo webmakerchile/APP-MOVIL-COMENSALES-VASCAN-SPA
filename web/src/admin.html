@@ -197,7 +197,7 @@
         try {
           const loginValue = looksLikeRut(identifier) ? cleanRut(identifier) : identifier.trim();
           const data = await apiFetch('/api/auth/login', { method: 'POST', body: JSON.stringify({ rut: loginValue, password }) });
-          if (data.user.role !== 'admin') { setError('Acceso restringido a administradores'); return; }
+          if (data.user.role !== 'admin' && data.user.role !== 'interlocutor') { setError('Acceso restringido'); return; }
           onLogin(data.user);
         } catch (err) {
           setError('Usuario o contraseña incorrectos');
@@ -233,16 +233,17 @@
 
     // ── Sidebar ──
     function Sidebar({ active, onNav, onLogout, user }) {
-      const items = [
-        { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-        { id: 'usuarios', label: 'Usuarios', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
-        { id: 'casinos', label: 'Casinos', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' },
-        { id: 'minutas', label: 'Minutas', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
-        { id: 'consolidacion', label: 'Consolidación', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' },
-        { id: 'familias', label: 'Familias', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z' },
-        { id: 'periodos', label: 'Periodos', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-        { id: 'carga', label: 'Carga Masiva', icon: 'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12' },
+      const allItems = [
+        { id: 'dashboard', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', roles: ['admin', 'interlocutor'] },
+        { id: 'consolidacion', label: 'Consolidación', icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z', roles: ['admin', 'interlocutor'] },
+        { id: 'usuarios', label: 'Usuarios', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z', roles: ['admin'] },
+        { id: 'casinos', label: 'Casinos', icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4', roles: ['admin'] },
+        { id: 'minutas', label: 'Minutas', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01', roles: ['admin'] },
+        { id: 'familias', label: 'Familias', icon: 'M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z', roles: ['admin'] },
+        { id: 'periodos', label: 'Periodos', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', roles: ['admin'] },
+        { id: 'carga', label: 'Carga Masiva', icon: 'M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12', roles: ['admin'] },
       ];
+      const items = allItems.filter(item => item.roles.includes(user?.role || 'admin'));
 
       return (
         <div className="w-64 bg-vascan-surface border-r border-white/10 flex flex-col min-h-screen">
@@ -1212,7 +1213,10 @@
       const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
       const [report, setReport] = useState(null);
       const [loading, setLoading] = useState(false);
+      const [downloading, setDownloading] = useState(false);
       const [loadingCasinos, setLoadingCasinos] = useState(true);
+      const [weekReport, setWeekReport] = useState(null);
+      const [loadingWeek, setLoadingWeek] = useState(false);
 
       useEffect(() => {
         apiFetch('/api/casinos').then(data => {
@@ -1226,11 +1230,35 @@
         if (!selectedCasino || !selectedDate) return;
         setLoading(true);
         setReport(null);
+        setWeekReport(null);
         try {
-          const data = await apiFetch(`/api/reportes/consolidacion?casinoId=${selectedCasino}&fecha=${selectedDate}`);
-          setReport(data);
+          const [dayData, weekData] = await Promise.all([
+            apiFetch(`/api/reportes/consolidacion?casinoId=${selectedCasino}&fecha=${selectedDate}`),
+            apiFetch(`/api/reportes/consolidacion-semanal?casinoId=${selectedCasino}&fecha=${selectedDate}`).catch(() => null),
+          ]);
+          setReport(dayData);
+          setWeekReport(weekData);
         } catch (err) { console.error(err); }
         setLoading(false);
+      }
+
+      async function downloadExcel() {
+        if (!selectedCasino || !selectedDate) return;
+        setDownloading(true);
+        try {
+          const resp = await fetch(`/api/reportes/programacion-semanal?casinoId=${selectedCasino}&fecha=${selectedDate}`, { credentials: 'include' });
+          if (!resp.ok) throw new Error('Error al descargar');
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          const disp = resp.headers.get('content-disposition') || '';
+          const match = disp.match(/filename="?([^"]+)"?/);
+          a.download = match ? match[1] : 'programacion_semanal.xlsx';
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch (err) { console.error(err); }
+        setDownloading(false);
       }
 
       if (loadingCasinos) return <LoadingSpinner />;
@@ -1239,13 +1267,18 @@
         <div className="fade-in">
           <h1 className="text-2xl font-bold mb-6">Consolidación / Programación</h1>
           <div className="bg-vascan-surface rounded-2xl border border-white/10 p-6 mb-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
               <SelectField label="Casino" value={selectedCasino} onChange={setSelectedCasino}
                 options={casinos.map(c => ({ value: c.id, label: c.nombre }))} />
-              <InputField label="Fecha" value={selectedDate} onChange={setSelectedDate} type="date" />
+              <InputField label="Fecha (cualquier día de la semana)" value={selectedDate} onChange={setSelectedDate} type="date" />
               <button onClick={handleSearch} disabled={loading}
                 className="bg-vascan-gold hover:bg-vascan-goldDark text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50 text-sm">
                 {loading ? 'Consultando...' : 'Consultar'}
+              </button>
+              <button onClick={downloadExcel} disabled={downloading || !selectedCasino}
+                className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2.5 rounded-xl transition disabled:opacity-50 text-sm flex items-center justify-center gap-2">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                {downloading ? 'Generando...' : 'Descargar Excel Semanal'}
               </button>
             </div>
           </div>
@@ -1315,6 +1348,79 @@
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {weekReport && (
+            <div className="bg-vascan-surface rounded-2xl border border-white/10 overflow-hidden mt-6 fade-in">
+              <div className="p-5 border-b border-white/10 flex items-center justify-between">
+                <div>
+                  <h2 className="font-semibold text-lg">Programación Semanal</h2>
+                  <p className="text-white/50 text-sm mt-0.5">{weekReport.casinoNombre} — Semana {weekReport.weekStart} al {weekReport.weekEnd} — {weekReport.totalComensales} comensales</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-white/10 text-white/50">
+                      <th className="text-left px-4 py-3">Opción</th>
+                      {weekReport.dias.map(d => (
+                        <th key={d.fecha} className="text-center px-4 py-3">{d.dia}<br/><span className="text-[10px] font-normal">{d.fecha.slice(5)}</span></th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(() => {
+                      const maxOpts = Math.max(...weekReport.dias.map(d => d.opciones.length));
+                      const rows = [];
+                      for (let i = 0; i < maxOpts; i++) {
+                        rows.push(
+                          <tr key={`desc-${i}`} className="border-b border-white/5">
+                            <td className="px-4 py-2 font-medium text-vascan-gold text-xs">OP{i+1}</td>
+                            {weekReport.dias.map(d => (
+                              <td key={d.fecha} className="px-4 py-2 text-center text-[11px] text-white/60 max-w-[120px] truncate" title={d.opciones[i]?.descripcion || ''}>{d.opciones[i]?.descripcion || '—'}</td>
+                            ))}
+                          </tr>
+                        );
+                      }
+                      rows.push(
+                        <tr key="spacer" className="h-2"></tr>
+                      );
+                      for (let i = 0; i < maxOpts; i++) {
+                        rows.push(
+                          <tr key={`count-${i}`} className="border-b border-white/5">
+                            <td className="px-4 py-2 text-white/70">Opción {i+1}</td>
+                            {weekReport.dias.map(d => (
+                              <td key={d.fecha} className="px-4 py-2 text-center font-semibold">{d.opciones[i]?.cantidad || 0}</td>
+                            ))}
+                          </tr>
+                        );
+                      }
+                      rows.push(
+                        <tr key="total" className="border-t border-white/20 bg-green-500/5">
+                          <td className="px-4 py-3 font-bold text-green-400">TOTAL</td>
+                          {weekReport.dias.map(d => (
+                            <td key={d.fecha} className="px-4 py-3 text-center font-bold text-green-400 text-lg">{d.total}</td>
+                          ))}
+                        </tr>,
+                        <tr key="noasiste" className="bg-yellow-500/5">
+                          <td className="px-4 py-2 text-yellow-400 text-xs">No asisten</td>
+                          {weekReport.dias.map(d => (
+                            <td key={d.fecha} className="px-4 py-2 text-center text-yellow-400">{d.noAsiste}</td>
+                          ))}
+                        </tr>,
+                        <tr key="noinsc" className="bg-red-500/5">
+                          <td className="px-4 py-2 text-red-400 text-xs">No inscritos</td>
+                          {weekReport.dias.map(d => (
+                            <td key={d.fecha} className="px-4 py-2 text-center text-red-400">{d.noInscritos}</td>
+                          ))}
+                        </tr>
+                      );
+                      return rows;
+                    })()}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </div>
@@ -1780,7 +1886,12 @@
 
       useEffect(() => {
         apiFetch('/api/auth/me')
-          .then(data => { if (data.user.role === 'admin') setUser(data.user); })
+          .then(data => {
+            if (data.user.role === 'admin' || data.user.role === 'interlocutor') {
+              setUser(data.user);
+              if (data.user.role === 'interlocutor') setView('consolidacion');
+            }
+          })
           .catch(() => {})
           .finally(() => setChecking(false));
       }, []);

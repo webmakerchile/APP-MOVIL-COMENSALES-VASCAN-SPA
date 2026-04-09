@@ -378,8 +378,8 @@ function requireAdmin(req, res, next) {
     if (!user) {
       return res.status(401).json({ message: "Usuario no encontrado" });
     }
-    if (user.role !== "admin") {
-      return res.status(403).json({ message: "Acceso restringido a administradores" });
+    if (user.role !== "admin" && user.role !== "interlocutor") {
+      return res.status(403).json({ message: "Acceso restringido" });
     }
     req.currentUser = user;
     next();
@@ -1240,6 +1240,268 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Consolidacion error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+  app2.get("/api/reportes/consolidacion-semanal", requireAdmin, async (req, res) => {
+    try {
+      const { casinoId, fecha } = req.query;
+      if (!casinoId || !fecha) return res.status(400).json({ message: "casinoId y fecha requeridos" });
+      const casino = await storage.getCasino(casinoId);
+      if (!casino) return res.status(404).json({ message: "Casino no encontrado" });
+      const d = /* @__PURE__ */ new Date(fecha + "T12:00:00");
+      const dayOfWeek = d.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() + mondayOffset);
+      const weekDates = [];
+      for (let i = 0; i < 5; i++) {
+        const dd = new Date(monday);
+        dd.setDate(monday.getDate() + i);
+        weekDates.push(dd.toISOString().split("T")[0]);
+      }
+      const allMinutas = await storage.getAllMinutasByCasino(casinoId);
+      const weekMinutas = weekDates.map((f) => allMinutas.find((m) => m.fecha === f) || null);
+      const allUsers = await storage.getUsers();
+      const casinoUsers = allUsers.filter((u) => u.casinoId === casinoId && u.role === "comensal" && u.activo);
+      const allPedidos = await storage.getAllPedidos();
+      const weekMinutaIds = weekMinutas.filter(Boolean).map((m) => m.id);
+      const weekPedidos = allPedidos.filter((p) => weekMinutaIds.includes(p.minutaId));
+      const dayNames = ["Lun", "Mar", "Mi\xE9", "Jue", "Vie"];
+      const dias = weekDates.map((fecha2, i) => {
+        const minuta = weekMinutas[i];
+        if (!minuta) return { fecha: fecha2, dia: dayNames[i], opciones: [], total: 0, noAsiste: 0, noInscritos: casinoUsers.length };
+        const pedidos2 = weekPedidos.filter((p) => p.minutaId === minuta.id);
+        const seleccion = pedidos2.filter((p) => p.tipo !== "no_asiste" && p.tipo !== "visita");
+        const noAsiste = pedidos2.filter((p) => p.tipo === "no_asiste").length;
+        const inscritosIds = new Set(pedidos2.map((p) => p.userId));
+        const noInscritos = casinoUsers.filter((u) => !inscritosIds.has(u.id)).length;
+        const allOpts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5];
+        const opciones = allOpts.filter(Boolean).map((desc, idx) => ({
+          numero: idx + 1,
+          descripcion: desc,
+          cantidad: seleccion.filter((p) => p.opcionSeleccionada === idx + 1).length
+        }));
+        return { fecha: fecha2, dia: dayNames[i], opciones, total: seleccion.length, noAsiste, noInscritos };
+      });
+      return res.json({
+        casinoNombre: casino.nombre,
+        weekStart: weekDates[0],
+        weekEnd: weekDates[4],
+        totalComensales: casinoUsers.length,
+        dias
+      });
+    } catch (error) {
+      console.error("Consolidacion semanal error:", error);
+      return res.status(500).json({ message: "Error interno" });
+    }
+  });
+  app2.get("/api/reportes/programacion-semanal", requireAdmin, async (req, res) => {
+    try {
+      let formatDateHeader2 = function(fecha2, dayName, minuta) {
+        const dd = /* @__PURE__ */ new Date(fecha2 + "T12:00:00");
+        const dayNum = dd.getDate();
+        const month = monthNames[dd.getMonth()];
+        let header = `${dayName} ${dayNum} DE ${month}`;
+        if (minuta) {
+          const opts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5].filter(Boolean);
+          header += " " + opts.map((o, i) => `OP${i + 1}: ${o}`).join(" ");
+        }
+        return header;
+      };
+      var formatDateHeader = formatDateHeader2;
+      const { casinoId, fecha } = req.query;
+      if (!casinoId || !fecha) {
+        return res.status(400).json({ message: "casinoId y fecha son requeridos" });
+      }
+      const casino = await storage.getCasino(casinoId);
+      if (!casino) return res.status(404).json({ message: "Casino no encontrado" });
+      const d = /* @__PURE__ */ new Date(fecha + "T12:00:00");
+      const dayOfWeek = d.getDay();
+      const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() + mondayOffset);
+      const weekDates = [];
+      for (let i = 0; i < 5; i++) {
+        const dd = new Date(monday);
+        dd.setDate(monday.getDate() + i);
+        weekDates.push(dd.toISOString().split("T")[0]);
+      }
+      const allMinutas = await storage.getAllMinutasByCasino(casinoId);
+      const weekMinutas = weekDates.map((fecha2) => allMinutas.find((m) => m.fecha === fecha2) || null);
+      const allUsers = await storage.getUsers();
+      const casinoUsers = allUsers.filter((u) => u.casinoId === casinoId && u.role === "comensal" && u.activo).sort((a, b) => `${a.apellido} ${a.nombre}`.localeCompare(`${b.apellido} ${b.nombre}`));
+      const allPedidos = await storage.getAllPedidos();
+      const weekMinutaIds = weekMinutas.filter(Boolean).map((m) => m.id);
+      const weekPedidos = allPedidos.filter((p) => weekMinutaIds.includes(p.minutaId));
+      const dayNames = ["LUNES", "MARTES", "MIERCOLES", "JUEVES", "VIERNES"];
+      const monthNames = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+      const ExcelJS2 = (await import("exceljs")).default;
+      const wb = new ExcelJS2.Workbook();
+      const headerFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1B365D" } };
+      const headerFont = { bold: true, size: 11, color: { argb: "FFFFFFFF" } };
+      const goldFill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
+      const borderThin = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
+      const wsDatos = wb.addWorksheet("Datos", { properties: { tabColor: { argb: "FFD4A843" } } });
+      const datosHeaders = ["ID", "RUT", "Nombre completo"];
+      weekDates.forEach((fecha2, i) => datosHeaders.push(formatDateHeader2(fecha2, dayNames[i], weekMinutas[i])));
+      wsDatos.columns = datosHeaders.map((h, i) => ({
+        header: h,
+        key: `col${i}`,
+        width: i === 0 ? 6 : i === 1 ? 16 : i === 2 ? 35 : 15
+      }));
+      const hRow = wsDatos.getRow(1);
+      hRow.height = 80;
+      hRow.eachCell((cell) => {
+        cell.font = headerFont;
+        cell.fill = headerFill;
+        cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
+        cell.border = borderThin;
+      });
+      let rowIdx = 1;
+      casinoUsers.forEach((user) => {
+        const rowData = {
+          col0: rowIdx,
+          col1: user.rut,
+          col2: `${user.apellido} ${user.nombre}`.toUpperCase()
+        };
+        weekMinutas.forEach((minuta, dayI) => {
+          if (!minuta) {
+            rowData[`col${dayI + 3}`] = "";
+            return;
+          }
+          const pedido = weekPedidos.find((p) => p.minutaId === minuta.id && p.userId === user.id);
+          if (!pedido) {
+            rowData[`col${dayI + 3}`] = "NO INSCRITO";
+            return;
+          }
+          if (pedido.tipo === "no_asiste") {
+            rowData[`col${dayI + 3}`] = "VACACIONES/ADMINISTRATIVO";
+            return;
+          }
+          rowData[`col${dayI + 3}`] = pedido.opcionSeleccionada;
+        });
+        wsDatos.addRow(rowData);
+        rowIdx++;
+      });
+      for (let r = 2; r <= wsDatos.rowCount; r++) {
+        const row = wsDatos.getRow(r);
+        row.eachCell({ includeEmpty: true }, (cell) => {
+          cell.border = borderThin;
+          cell.alignment = { vertical: "middle", horizontal: "center" };
+          if (cell.value === "VACACIONES/ADMINISTRATIVO") {
+            cell.fill = goldFill;
+            cell.font = { italic: true, size: 9, color: { argb: "FF996600" } };
+          } else if (cell.value === "NO INSCRITO") {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFCCCC" } };
+            cell.font = { italic: true, size: 9, color: { argb: "FFCC0000" } };
+          }
+        });
+      }
+      const wsResumen = wb.addWorksheet("Resumen", { properties: { tabColor: { argb: "FF4472C4" } } });
+      const resHeaders = ["Opci\xF3n"];
+      weekDates.forEach((fecha2, i) => {
+        const dd = /* @__PURE__ */ new Date(fecha2 + "T12:00:00");
+        resHeaders.push(`${dayNames[i]} ${dd.getDate()}/${dd.getMonth() + 1}`);
+      });
+      wsResumen.columns = resHeaders.map((h, i) => ({ header: h, key: `col${i}`, width: i === 0 ? 12 : 18 }));
+      const resHRow = wsResumen.getRow(1);
+      resHRow.height = 30;
+      resHRow.eachCell((cell) => {
+        cell.font = headerFont;
+        cell.fill = headerFill;
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+        cell.border = borderThin;
+      });
+      const maxOpts = Math.max(...weekMinutas.map((m) => m ? [m.opcion1, m.opcion2, m.opcion3, m.opcion4, m.opcion5].filter(Boolean).length : 0));
+      for (let optIdx = 0; optIdx < maxOpts; optIdx++) {
+        const descRow = { col0: `OP${optIdx + 1}` };
+        weekMinutas.forEach((minuta, dayI) => {
+          if (!minuta) {
+            descRow[`col${dayI + 1}`] = "";
+            return;
+          }
+          const opts = [minuta.opcion1, minuta.opcion2, minuta.opcion3, minuta.opcion4, minuta.opcion5].filter(Boolean);
+          descRow[`col${dayI + 1}`] = opts[optIdx] || "";
+        });
+        const r = wsResumen.addRow(descRow);
+        r.eachCell((cell) => {
+          cell.border = borderThin;
+          cell.alignment = { wrapText: true, vertical: "middle" };
+          cell.font = { italic: true, size: 10 };
+        });
+      }
+      wsResumen.addRow({});
+      for (let optIdx = 0; optIdx < maxOpts; optIdx++) {
+        const countRow = { col0: `Opci\xF3n ${optIdx + 1}` };
+        weekMinutas.forEach((minuta, dayI) => {
+          if (!minuta) {
+            countRow[`col${dayI + 1}`] = 0;
+            return;
+          }
+          const pedidos2 = weekPedidos.filter((p) => p.minutaId === minuta.id && p.tipo !== "no_asiste" && p.tipo !== "visita" && p.opcionSeleccionada === optIdx + 1);
+          countRow[`col${dayI + 1}`] = pedidos2.length;
+        });
+        const r = wsResumen.addRow(countRow);
+        r.eachCell((cell) => {
+          cell.border = borderThin;
+          cell.alignment = { horizontal: "center", vertical: "middle" };
+        });
+      }
+      const totalRow = { col0: "TOTAL" };
+      weekMinutas.forEach((minuta, dayI) => {
+        if (!minuta) {
+          totalRow[`col${dayI + 1}`] = 0;
+          return;
+        }
+        const pedidos2 = weekPedidos.filter((p) => p.minutaId === minuta.id && p.tipo !== "no_asiste" && p.tipo !== "visita");
+        totalRow[`col${dayI + 1}`] = pedidos2.length;
+      });
+      const tRow = wsResumen.addRow(totalRow);
+      tRow.eachCell((cell) => {
+        cell.font = { bold: true, size: 12 };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE2EFDA" } };
+        cell.border = borderThin;
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+      });
+      const vacRow = { col0: "No asisten" };
+      weekMinutas.forEach((minuta, dayI) => {
+        if (!minuta) {
+          vacRow[`col${dayI + 1}`] = 0;
+          return;
+        }
+        vacRow[`col${dayI + 1}`] = weekPedidos.filter((p) => p.minutaId === minuta.id && p.tipo === "no_asiste").length;
+      });
+      const vRow = wsResumen.addRow(vacRow);
+      vRow.eachCell((cell) => {
+        cell.border = borderThin;
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.fill = goldFill;
+      });
+      const noInscRow = { col0: "No inscritos" };
+      weekMinutas.forEach((minuta, dayI) => {
+        if (!minuta) {
+          noInscRow[`col${dayI + 1}`] = 0;
+          return;
+        }
+        const inscritosIds = new Set(weekPedidos.filter((p) => p.minutaId === minuta.id).map((p) => p.userId));
+        noInscRow[`col${dayI + 1}`] = casinoUsers.filter((u) => !inscritosIds.has(u.id)).length;
+      });
+      const niRow = wsResumen.addRow(noInscRow);
+      niRow.eachCell((cell) => {
+        cell.border = borderThin;
+        cell.alignment = { horizontal: "center", vertical: "middle" };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFCCCC" } };
+      });
+      const startDate = /* @__PURE__ */ new Date(weekDates[0] + "T12:00:00");
+      const endDate = /* @__PURE__ */ new Date(weekDates[4] + "T12:00:00");
+      const fileName = `PROGRAMACION_${startDate.getFullYear()}${String(startDate.getMonth() + 1).padStart(2, "0")}_${startDate.getDate()}_al_${endDate.getDate()}_${casino.nombre.replace(/\s+/g, "_").toUpperCase()}.xlsx`;
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+      await wb.xlsx.write(res);
+      res.end();
+    } catch (error) {
+      console.error("Programacion semanal error:", error);
+      return res.status(500).json({ message: "Error al generar reporte" });
     }
   });
   app2.post("/api/usuarios/upload", requireAdmin, upload.single("file"), async (req, res) => {

@@ -118,6 +118,10 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(minutas).where(and(eq(minutas.casinoId, casinoId), eq(minutas.activo, true)));
   }
 
+  async getAllMinutasByCasino(casinoId: string): Promise<Minuta[]> {
+    return db.select().from(minutas).where(eq(minutas.casinoId, casinoId));
+  }
+
   async getAllMinutas(): Promise<Minuta[]> {
     return db.select().from(minutas);
   }

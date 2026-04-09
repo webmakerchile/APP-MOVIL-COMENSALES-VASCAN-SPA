@@ -468,10 +468,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/minutas/:casinoId", async (req: Request, res: Response) => {
     try {
       const { casinoId } = req.params;
-      const minutasList = await storage.getMinutasByCasino(casinoId);
+      const isAdmin = !!(req.session as any).userId;
+      const all = req.query.all === "true";
+      const minutasList = (isAdmin && all)
+        ? await storage.getAllMinutasByCasino(casinoId)
+        : await storage.getMinutasByCasino(casinoId);
       return res.json(minutasList);
     } catch (error) {
       console.error("Get minutas error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
+  app.post("/api/minutas/batch-toggle", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { ids, activo } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Debe enviar una lista de IDs" });
+      }
+      let updated = 0;
+      for (const id of ids) {
+        const result = await storage.updateMinuta(id, { activo });
+        if (result) updated++;
+      }
+      return res.json({ message: `${updated} minutas ${activo ? 'activadas' : 'desactivadas'}`, updated });
+    } catch (error) {
+      console.error("Batch toggle minutas error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
     }
   });

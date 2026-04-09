@@ -223,6 +223,9 @@ var DatabaseStorage = class {
   async getMinutasByCasino(casinoId) {
     return db.select().from(minutas).where(and(eq(minutas.casinoId, casinoId), eq(minutas.activo, true)));
   }
+  async getAllMinutasByCasino(casinoId) {
+    return db.select().from(minutas).where(eq(minutas.casinoId, casinoId));
+  }
   async getAllMinutas() {
     return db.select().from(minutas);
   }
@@ -692,10 +695,29 @@ async function registerRoutes(app2) {
   app2.get("/api/minutas/:casinoId", async (req, res) => {
     try {
       const { casinoId } = req.params;
-      const minutasList = await storage.getMinutasByCasino(casinoId);
+      const isAdmin = !!req.session.userId;
+      const all = req.query.all === "true";
+      const minutasList = isAdmin && all ? await storage.getAllMinutasByCasino(casinoId) : await storage.getMinutasByCasino(casinoId);
       return res.json(minutasList);
     } catch (error) {
       console.error("Get minutas error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+  app2.post("/api/minutas/batch-toggle", requireAdmin, async (req, res) => {
+    try {
+      const { ids, activo } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "Debe enviar una lista de IDs" });
+      }
+      let updated = 0;
+      for (const id of ids) {
+        const result = await storage.updateMinuta(id, { activo });
+        if (result) updated++;
+      }
+      return res.json({ message: `${updated} minutas ${activo ? "activadas" : "desactivadas"}`, updated });
+    } catch (error) {
+      console.error("Batch toggle minutas error:", error);
       return res.status(500).json({ message: "Error interno del servidor" });
     }
   });

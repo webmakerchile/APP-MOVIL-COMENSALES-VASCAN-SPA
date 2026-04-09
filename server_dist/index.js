@@ -1649,6 +1649,15 @@ import * as fs2 from "fs";
 import * as path2 from "path";
 var app = express();
 var log = console.log;
+function setupNoCache(app2) {
+  app2.use("/api", (_req, res, next) => {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    res.set("Surrogate-Control", "no-store");
+    next();
+  });
+}
 function setupCors(app2) {
   app2.use((req, res, next) => {
     const origins = /* @__PURE__ */ new Set();
@@ -1807,6 +1816,7 @@ function setupErrorHandler(app2) {
 (async () => {
   app.set("trust proxy", 1);
   setupCors(app);
+  setupNoCache(app);
   setupBodyParsing(app);
   setupRequestLogging(app);
   configureExpoAndLanding(app);

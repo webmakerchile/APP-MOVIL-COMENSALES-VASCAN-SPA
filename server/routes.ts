@@ -440,13 +440,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/casinos/:id/has-history", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const casinoMinutas = await storage.getAllMinutasByCasino(id);
+      const allUsers = await storage.getUsers();
+      const usersInCasino = allUsers.filter(u => u.casinoId === id);
+      const hasHistory = casinoMinutas.length > 0 || usersInCasino.length > 0;
+      return res.json({ hasHistory, minutas: casinoMinutas.length, usuarios: usersInCasino.length });
+    } catch (error) {
+      return res.status(500).json({ message: "Error al verificar historial" });
+    }
+  });
+
   app.delete("/api/casinos/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const deleted = await storage.deleteCasino(id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Casino no encontrado" });
+      const force = req.query.force === "true";
+
+      const casinoMinutas = await storage.getAllMinutasByCasino(id);
+      const allUsers = await storage.getUsers();
+      const usersInCasino = allUsers.filter(u => u.casinoId === id);
+      const hasHistory = casinoMinutas.length > 0 || usersInCasino.length > 0;
+
+      if (hasHistory && !force) {
+        const deleted = await storage.deleteCasino(id);
+        if (!deleted) return res.status(404).json({ message: "Casino no encontrado" });
+        return res.json({ message: "Casino desactivado (tiene historial asociado)", action: "deactivated" });
       }
+
+      if (!hasHistory || force) {
+        const result = await storage.hardDeleteCasino(id);
+        if (!result) return res.status(404).json({ message: "Casino no encontrado" });
+        return res.json({ message: "Casino eliminado permanentemente", action: "deleted" });
+      }
+
       return res.json({ message: "Casino desactivado" });
     } catch (error) {
       console.error("Delete casino error:", error);

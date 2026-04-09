@@ -114,6 +114,11 @@ export class DatabaseStorage implements IStorage {
     return !!casino;
   }
 
+  async hardDeleteCasino(id: string): Promise<boolean> {
+    const [casino] = await db.delete(casinos).where(eq(casinos.id, id)).returning();
+    return !!casino;
+  }
+
   async getMinutasByCasino(casinoId: string): Promise<Minuta[]> {
     return db.select().from(minutas).where(and(eq(minutas.casinoId, casinoId), eq(minutas.activo, true)));
   }

@@ -26,6 +26,7 @@ export const users = pgTable("users", {
   password: text("password").notNull(),
   nombre: text("nombre").notNull(),
   apellido: text("apellido").notNull(),
+  telefono: text("telefono"),
   role: userRoleEnum("role").notNull().default("comensal"),
   casinoId: varchar("casino_id").references(() => casinos.id),
   activo: boolean("activo").notNull().default(true),
@@ -110,6 +111,7 @@ export const insertUserSchema = createInsertSchema(users).pick({
   password: true,
   nombre: true,
   apellido: true,
+  telefono: true,
   role: true,
   casinoId: true,
 });

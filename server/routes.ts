@@ -312,7 +312,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/usuarios", requireAdmin, async (req: Request, res: Response) => {
     try {
-      const { rut, nombre, apellido, role, casinoId, password: pwd } = req.body;
+      const { rut, nombre, apellido, telefono, role, casinoId, password: pwd } = req.body;
       if (!rut || !nombre || !apellido) {
         return res.status(400).json({ message: "RUT, nombre y apellido son requeridos" });
       }
@@ -332,6 +332,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rut,
         nombre,
         apellido,
+        telefono: telefono || null,
         password: hashedPassword,
         role: role || "comensal",
         casinoId: casinoId || null,
@@ -348,11 +349,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/usuarios/:id", requireAdmin, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { nombre, apellido, role, casinoId, activo, password: newPwd } = req.body;
+      const { nombre, apellido, telefono, role, casinoId, activo, password: newPwd } = req.body;
 
       const updateData: any = {};
       if (nombre !== undefined) updateData.nombre = nombre;
       if (apellido !== undefined) updateData.apellido = apellido;
+      if (telefono !== undefined) updateData.telefono = telefono || null;
       if (role !== undefined) updateData.role = role;
       if (casinoId !== undefined) updateData.casinoId = casinoId || null;
       if (activo !== undefined) updateData.activo = activo;
@@ -1108,6 +1110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const rut = String(row["RUT"] || row["rut"] || "").trim();
           const nombre = String(row["Nombre"] || row["nombre"] || "").trim();
           const apellido = String(row["Apellido"] || row["apellido"] || "").trim();
+          const telefonoRaw = String(row["Telefono"] || row["telefono"] || row["Teléfono"] || row["TELEFONO"] || row["Celular"] || row["celular"] || "").trim();
           const rolRaw = String(row["Rol"] || row["rol"] || row["ROL"] || "comensal").trim().toLowerCase();
           const casinoRaw = String(row["Casino_ID"] || row["casino_id"] || row["CasinoID"] || row["CASINO"] || row["Casino"] || "").trim();
 
@@ -1142,7 +1145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const defaultPassword = digits.slice(0, 4) || "1234";
           const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
-          await storage.createUser({ rut, nombre, apellido, password: hashedPassword, role: rol, casinoId: casinoId || null });
+          await storage.createUser({ rut, nombre, apellido, telefono: telefonoRaw || null, password: hashedPassword, role: rol, casinoId: casinoId || null });
           created++;
         } catch (err: any) {
           errorDetails.push({ row: rowNum, error: err.message || "Error desconocido" });
@@ -1272,6 +1275,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         { header: "RUT", key: "rut", width: 18 },
         { header: "NOMBRE", key: "nombre", width: 22 },
         { header: "APELLIDO", key: "apellido", width: 22 },
+        { header: "TELEFONO", key: "telefono", width: 18 },
         { header: "ROL", key: "rol", width: 18 },
         { header: "CASINO", key: "casino", width: 32 },
       ];
@@ -1290,13 +1294,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       casinosList.forEach(c => { casinoMap[c.nombre] = c.id; });
 
       const examples = [
-        { rut: "12345678-9", nombre: "Juan", apellido: "Pérez", rol: "comensal", casino: casinoNames[0] || "" },
-        { rut: "98765432-1", nombre: "María", apellido: "González", rol: "interlocutor", casino: casinoNames[0] || "" },
-        { rut: "11223344-5", nombre: "Carlos", apellido: "Muñoz", rol: "comensal", casino: "" },
+        { rut: "12345678-9", nombre: "Juan", apellido: "Pérez", telefono: "+56912345678", rol: "comensal", casino: casinoNames[0] || "" },
+        { rut: "98765432-1", nombre: "María", apellido: "González", telefono: "+56987654321", rol: "interlocutor", casino: casinoNames[0] || "" },
+        { rut: "11223344-5", nombre: "Carlos", apellido: "Muñoz", telefono: "", rol: "comensal", casino: "" },
       ];
       examples.forEach(ex => wsUsers.addRow(ex));
 
-      for (let i = 0; i < 97; i++) wsUsers.addRow({ rut: "", nombre: "", apellido: "", rol: "", casino: "" });
+      for (let i = 0; i < 97; i++) wsUsers.addRow({ rut: "", nombre: "", apellido: "", telefono: "", rol: "", casino: "" });
 
       const DATA_ROWS = 100;
       for (let r = 2; r <= DATA_ROWS + 1; r++) {
@@ -1310,7 +1314,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cell.alignment = colNumber === 1 ? EX.center : EX.left;
         });
 
-        wsUsers.getCell(`D${r}`).dataValidation = {
+        wsUsers.getCell(`E${r}`).dataValidation = {
           type: "list",
           allowBlank: true,
           formulae: ['"comensal,interlocutor,admin"'],
@@ -1323,7 +1327,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
 
         if (casinoNames.length > 0) {
-          wsUsers.getCell(`E${r}`).dataValidation = {
+          wsUsers.getCell(`F${r}`).dataValidation = {
             type: "list",
             allowBlank: true,
             formulae: [`"${casinoNames.join(",")}"`],

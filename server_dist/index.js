@@ -67,6 +67,7 @@ var users = pgTable("users", {
   password: text("password").notNull(),
   nombre: text("nombre").notNull(),
   apellido: text("apellido").notNull(),
+  telefono: text("telefono"),
   role: userRoleEnum("role").notNull().default("comensal"),
   casinoId: varchar("casino_id").references(() => casinos.id),
   activo: boolean("activo").notNull().default(true),
@@ -125,6 +126,7 @@ var insertUserSchema = createInsertSchema(users).pick({
   password: true,
   nombre: true,
   apellido: true,
+  telefono: true,
   role: true,
   casinoId: true
 });
@@ -567,7 +569,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/usuarios", requireAdmin, async (req, res) => {
     try {
-      const { rut, nombre, apellido, role, casinoId, password: pwd } = req.body;
+      const { rut, nombre, apellido, telefono, role, casinoId, password: pwd } = req.body;
       if (!rut || !nombre || !apellido) {
         return res.status(400).json({ message: "RUT, nombre y apellido son requeridos" });
       }
@@ -584,6 +586,7 @@ async function registerRoutes(app2) {
         rut,
         nombre,
         apellido,
+        telefono: telefono || null,
         password: hashedPassword,
         role: role || "comensal",
         casinoId: casinoId || null
@@ -598,10 +601,11 @@ async function registerRoutes(app2) {
   app2.put("/api/usuarios/:id", requireAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const { nombre, apellido, role, casinoId, activo, password: newPwd } = req.body;
+      const { nombre, apellido, telefono, role, casinoId, activo, password: newPwd } = req.body;
       const updateData = {};
       if (nombre !== void 0) updateData.nombre = nombre;
       if (apellido !== void 0) updateData.apellido = apellido;
+      if (telefono !== void 0) updateData.telefono = telefono || null;
       if (role !== void 0) updateData.role = role;
       if (casinoId !== void 0) updateData.casinoId = casinoId || null;
       if (activo !== void 0) updateData.activo = activo;
@@ -1258,6 +1262,7 @@ async function registerRoutes(app2) {
           const rut = String(row["RUT"] || row["rut"] || "").trim();
           const nombre = String(row["Nombre"] || row["nombre"] || "").trim();
           const apellido = String(row["Apellido"] || row["apellido"] || "").trim();
+          const telefonoRaw = String(row["Telefono"] || row["telefono"] || row["Tel\xE9fono"] || row["TELEFONO"] || row["Celular"] || row["celular"] || "").trim();
           const rolRaw = String(row["Rol"] || row["rol"] || row["ROL"] || "comensal").trim().toLowerCase();
           const casinoRaw = String(row["Casino_ID"] || row["casino_id"] || row["CasinoID"] || row["CASINO"] || row["Casino"] || "").trim();
           if (!rut || !nombre) {
@@ -1289,7 +1294,7 @@ async function registerRoutes(app2) {
           const digits = rut.replace(/[^0-9]/g, "");
           const defaultPassword = digits.slice(0, 4) || "1234";
           const hashedPassword = await bcrypt.hash(defaultPassword, 10);
-          await storage.createUser({ rut, nombre, apellido, password: hashedPassword, role: rol, casinoId: casinoId || null });
+          await storage.createUser({ rut, nombre, apellido, telefono: telefonoRaw || null, password: hashedPassword, role: rol, casinoId: casinoId || null });
           created++;
         } catch (err) {
           errorDetails.push({ row: rowNum, error: err.message || "Error desconocido" });
@@ -1410,6 +1415,7 @@ async function registerRoutes(app2) {
         { header: "RUT", key: "rut", width: 18 },
         { header: "NOMBRE", key: "nombre", width: 22 },
         { header: "APELLIDO", key: "apellido", width: 22 },
+        { header: "TELEFONO", key: "telefono", width: 18 },
         { header: "ROL", key: "rol", width: 18 },
         { header: "CASINO", key: "casino", width: 32 }
       ];
@@ -1427,12 +1433,12 @@ async function registerRoutes(app2) {
         casinoMap[c.nombre] = c.id;
       });
       const examples = [
-        { rut: "12345678-9", nombre: "Juan", apellido: "P\xE9rez", rol: "comensal", casino: casinoNames[0] || "" },
-        { rut: "98765432-1", nombre: "Mar\xEDa", apellido: "Gonz\xE1lez", rol: "interlocutor", casino: casinoNames[0] || "" },
-        { rut: "11223344-5", nombre: "Carlos", apellido: "Mu\xF1oz", rol: "comensal", casino: "" }
+        { rut: "12345678-9", nombre: "Juan", apellido: "P\xE9rez", telefono: "+56912345678", rol: "comensal", casino: casinoNames[0] || "" },
+        { rut: "98765432-1", nombre: "Mar\xEDa", apellido: "Gonz\xE1lez", telefono: "+56987654321", rol: "interlocutor", casino: casinoNames[0] || "" },
+        { rut: "11223344-5", nombre: "Carlos", apellido: "Mu\xF1oz", telefono: "", rol: "comensal", casino: "" }
       ];
       examples.forEach((ex) => wsUsers.addRow(ex));
-      for (let i = 0; i < 97; i++) wsUsers.addRow({ rut: "", nombre: "", apellido: "", rol: "", casino: "" });
+      for (let i = 0; i < 97; i++) wsUsers.addRow({ rut: "", nombre: "", apellido: "", telefono: "", rol: "", casino: "" });
       const DATA_ROWS = 100;
       for (let r = 2; r <= DATA_ROWS + 1; r++) {
         const row = wsUsers.getRow(r);
@@ -1444,7 +1450,7 @@ async function registerRoutes(app2) {
           cell.border = EX.borderThin;
           cell.alignment = colNumber === 1 ? EX.center : EX.left;
         });
-        wsUsers.getCell(`D${r}`).dataValidation = {
+        wsUsers.getCell(`E${r}`).dataValidation = {
           type: "list",
           allowBlank: true,
           formulae: ['"comensal,interlocutor,admin"'],
@@ -1456,7 +1462,7 @@ async function registerRoutes(app2) {
           showInputMessage: true
         };
         if (casinoNames.length > 0) {
-          wsUsers.getCell(`E${r}`).dataValidation = {
+          wsUsers.getCell(`F${r}`).dataValidation = {
             type: "list",
             allowBlank: true,
             formulae: [`"${casinoNames.join(",")}"`],

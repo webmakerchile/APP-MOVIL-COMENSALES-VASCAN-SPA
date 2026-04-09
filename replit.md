@@ -13,7 +13,7 @@ Casino/cafeteria meal management system for enterprise dining. Workers register 
 - **Static files**: `public/` directory served statically (case studies, etc.)
 
 ## Data Model
-- **Users**: Authenticated via Chilean RUT + password. Roles: admin, comensal, interlocutor
+- **Users**: Authenticated via Chilean RUT + password. Roles: admin, comensal, interlocutor. Has optional `telefono` field for Twilio reminders
 - **Casinos**: Dining locations/venues with `comensalesDiarios` (expected daily diners) for participation tracking  
 - **Minutas**: Daily menus with up to 5 options per date per casino. Each has a `familia` field linked to dynamic Familias table
 - **Familias**: Dynamic categories for minutas (Almuerzo, Desayuno, Colación, VIP, etc.) with custom colors. Admin CRUD via `/api/familias`

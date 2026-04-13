@@ -25,7 +25,7 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
-  const { canInstall, install } = usePwaInstall();
+  const { canInstall, install, showIosGuide } = usePwaInstall();
   const insets = useSafeAreaInsets();
 
   function formatRut(value: string) {
@@ -199,6 +199,39 @@ export default function LoginScreen() {
               <Text style={styles.installButtonText}>Instalar app</Text>
             </Pressable>
           )}
+
+          {showIosGuide && (
+            <View style={styles.iosGuide}>
+              <View style={styles.iosGuideHeader}>
+                <Feather name="smartphone" size={15} color={Colors.primary} />
+                <Text style={styles.iosGuideTitle}>Instalar en iPhone</Text>
+              </View>
+              <View style={styles.iosStep}>
+                <View style={styles.iosStepIcon}>
+                  <Feather name="upload" size={16} color={Colors.primary} />
+                </View>
+                <Text style={styles.iosStepText}>
+                  Toca el ícono de <Text style={styles.iosStepBold}>compartir</Text> en Safari
+                </Text>
+              </View>
+              <View style={styles.iosStep}>
+                <View style={styles.iosStepIcon}>
+                  <Feather name="plus-square" size={16} color={Colors.primary} />
+                </View>
+                <Text style={styles.iosStepText}>
+                  Baja hasta <Text style={styles.iosStepBold}>"Agregar a inicio"</Text>
+                </Text>
+              </View>
+              <View style={styles.iosStep}>
+                <View style={styles.iosStepIcon}>
+                  <Feather name="check-circle" size={16} color={Colors.primary} />
+                </View>
+                <Text style={styles.iosStepText}>
+                  Toca <Text style={styles.iosStepBold}>"Agregar"</Text>
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.footer}>
@@ -336,6 +369,48 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     fontSize: 15,
     color: Colors.primary,
+  },
+  iosGuide: {
+    borderWidth: 1,
+    borderColor: "rgba(212, 168, 67, 0.25)",
+    borderRadius: 14,
+    backgroundColor: "rgba(212, 168, 67, 0.06)",
+    padding: 16,
+    gap: 12,
+  },
+  iosGuideHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  iosGuideTitle: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 13,
+    color: Colors.primary,
+  },
+  iosStep: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  iosStepIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(212, 168, 67, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iosStepText: {
+    fontFamily: "Poppins_400Regular",
+    fontSize: 13,
+    color: Colors.textSecondary,
+    flex: 1,
+  },
+  iosStepBold: {
+    fontFamily: "Poppins_600SemiBold",
+    color: Colors.text,
   },
   footer: {
     alignItems: "center",

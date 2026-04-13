@@ -12,6 +12,7 @@ import {
   RefreshCw,
   QrCode,
   UserPlus,
+  Clock,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
@@ -231,6 +232,13 @@ export default function Home() {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate("/historial")}
+            className="w-9 h-9 rounded-lg bg-white/6 flex items-center justify-center text-white/40 hover:text-white/70 transition-colors"
+            title="Historial de pedidos"
+          >
+            <Clock className="w-4 h-4" />
+          </button>
           <button
             onClick={() => refetch()}
             disabled={isRefetching}

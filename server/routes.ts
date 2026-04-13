@@ -855,6 +855,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Historial enriquecido ──
+  app.get("/api/historial/:userId", async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const sessionUserId = (req.session as any).userId;
+      if (!sessionUserId) return res.status(401).json({ message: "No autenticado" });
+
+      const pedidosList = await storage.getPedidosByUser(userId);
+      const allMinutas = await storage.getAllMinutas();
+      const minutaMap: Record<string, any> = {};
+      for (const m of allMinutas) minutaMap[m.id] = m;
+
+      const enriched = pedidosList.map((p) => {
+        const m = minutaMap[p.minutaId];
+        const opts: Record<number, string> = {};
+        if (m) {
+          opts[1] = m.opcion1; opts[2] = m.opcion2; opts[3] = m.opcion3;
+          if (m.opcion4) opts[4] = m.opcion4;
+          if (m.opcion5) opts[5] = m.opcion5;
+        }
+        return {
+          ...p,
+          fecha: m?.fecha ?? null,
+          familia: m?.familia ?? null,
+          opcionTexto: p.opcionSeleccionada > 0 ? (opts[p.opcionSeleccionada] ?? null) : null,
+        };
+      });
+
+      // Sort by fecha desc (most recent first)
+      enriched.sort((a, b) => {
+        if (!a.fecha) return 1;
+        if (!b.fecha) return -1;
+        return new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+      });
+
+      return res.json(enriched);
+    } catch (error) {
+      console.error("Historial error:", error);
+      return res.status(500).json({ message: "Error interno del servidor" });
+    }
+  });
+
   app.post("/api/pedidos", async (req: Request, res: Response) => {
     try {
       const parsed = insertPedidoSchema.safeParse(req.body);

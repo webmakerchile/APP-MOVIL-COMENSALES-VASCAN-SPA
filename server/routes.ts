@@ -11,6 +11,7 @@ import * as fs from "fs";
 import { storage } from "./storage";
 import { pool, db } from "./db";
 import { loginSchema, insertUserSchema, insertMinutaSchema, insertPedidoSchema, insertCasinoSchema, pedidos as pedidosTable } from "@shared/schema";
+import { generateDailyReport } from "./cron";
 
 const PgSession = connectPgSimple(session);
 const upload = multer({ dest: "/tmp/uploads/" });
@@ -1054,6 +1055,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Create vale visita error:", error);
       return res.status(500).json({ message: "Error al crear vale de visita" });
+    }
+  });
+
+  // ── Reporte Diario Manual ──
+  app.post("/api/reportes/diario", requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const fecha = (req.body?.fecha as string) || new Date().toISOString().split("T")[0];
+      const entries = await generateDailyReport(fecha);
+      console.log(`[reporte manual] Generado para ${fecha}:`, JSON.stringify(entries, null, 2));
+      return res.json({ fecha, casinos: entries });
+    } catch (error) {
+      console.error("Error reporte diario manual:", error);
+      return res.status(500).json({ message: "Error al generar reporte diario" });
     }
   });
 

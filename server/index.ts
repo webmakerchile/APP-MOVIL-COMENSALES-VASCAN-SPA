@@ -1,6 +1,7 @@
 import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
+import { startCronJobs } from "./cron";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -279,6 +280,7 @@ function setupErrorHandler(app: express.Application) {
     },
     () => {
       log(`express server serving on port ${port}`);
+      startCronJobs();
     },
   );
 })();

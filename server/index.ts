@@ -171,6 +171,27 @@ function serveLandingPage({
 }
 
 function configureExpoAndLanding(app: express.Application) {
+  const pwaDist = path.resolve(process.cwd(), "pwa", "dist");
+  const pwaBuild = path.join(pwaDist, "index.html");
+  const pwaBuildExists = fs.existsSync(pwaBuild);
+
+  if (pwaBuildExists) {
+    log("Serving PWA from pwa/dist");
+
+    // Serve PWA static assets (JS, CSS, icons, sw.js, manifest.json)
+    app.use(express.static(pwaDist));
+
+    // SPA fallback: any non-API, non-admin route → index.html
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith("/api") || req.path.startsWith("/admin")) {
+        return next();
+      }
+      res.sendFile(pwaBuild);
+    });
+    return;
+  }
+
+  // Fallback: Expo landing page (dev mode / before PWA build)
   const templatePath = path.resolve(
     process.cwd(),
     "server",

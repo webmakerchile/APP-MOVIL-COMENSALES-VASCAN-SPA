@@ -2178,6 +2178,20 @@ function serveLandingPage({
   res.status(200).send(html);
 }
 function configureExpoAndLanding(app2) {
+  const pwaDist = path2.resolve(process.cwd(), "pwa", "dist");
+  const pwaBuild = path2.join(pwaDist, "index.html");
+  const pwaBuildExists = fs2.existsSync(pwaBuild);
+  if (pwaBuildExists) {
+    log("Serving PWA from pwa/dist");
+    app2.use(express.static(pwaDist));
+    app2.use((req, res, next) => {
+      if (req.path.startsWith("/api") || req.path.startsWith("/admin")) {
+        return next();
+      }
+      res.sendFile(pwaBuild);
+    });
+    return;
+  }
   const templatePath = path2.resolve(
     process.cwd(),
     "server",

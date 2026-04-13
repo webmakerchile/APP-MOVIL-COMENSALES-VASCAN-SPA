@@ -60,7 +60,9 @@ async function ensureSuperAdmin() {
   try {
     const oliver = await storage.getUserByRut("olivervasquez");
     if (!oliver) {
-      const hashed = await bcrypt.hash("6676", 10);
+      const oliverPassword = process.env.OLIVER_PASSWORD;
+      if (!oliverPassword) throw new Error("OLIVER_PASSWORD env var is not set");
+      const hashed = await bcrypt.hash(oliverPassword, 10);
       await storage.createUser({
         rut: "olivervasquez",
         password: hashed,
@@ -73,6 +75,48 @@ async function ensureSuperAdmin() {
     }
   } catch (err) {
     console.error("Oliver admin init error:", err);
+  }
+
+  try {
+    const oliverComensal = await storage.getUserByRut("9876543-3");
+    if (!oliverComensal) {
+      const password = process.env.OLIVER_PASSWORD;
+      if (!password) throw new Error("OLIVER_PASSWORD env var is not set");
+      const casinos = await storage.getCasinos();
+      const hashed = await bcrypt.hash(password, 10);
+      await storage.createUser({
+        rut: "9876543-3",
+        password: hashed,
+        nombre: "Oliver (Demo)",
+        apellido: "Comensal",
+        role: "comensal",
+        casinoId: casinos[0]?.id ?? null,
+      });
+      console.log("Oliver comensal demo created.");
+    }
+  } catch (err) {
+    console.error("Oliver comensal init error:", err);
+  }
+
+  try {
+    const oliverInterlocutor = await storage.getUserByRut("7654321-6");
+    if (!oliverInterlocutor) {
+      const password = process.env.OLIVER_PASSWORD;
+      if (!password) throw new Error("OLIVER_PASSWORD env var is not set");
+      const casinos = await storage.getCasinos();
+      const hashed = await bcrypt.hash(password, 10);
+      await storage.createUser({
+        rut: "7654321-6",
+        password: hashed,
+        nombre: "Oliver (Demo)",
+        apellido: "Interlocutor",
+        role: "interlocutor",
+        casinoId: casinos[0]?.id ?? null,
+      });
+      console.log("Oliver interlocutor demo created.");
+    }
+  } catch (err) {
+    console.error("Oliver interlocutor init error:", err);
   }
 }
 

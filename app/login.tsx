@@ -16,6 +16,7 @@ import * as Haptics from "expo-haptics";
 import { Feather } from "@expo/vector-icons";
 import Colors from "@/constants/colors";
 import { useAuth } from "@/lib/auth-context";
+import { usePwaInstall } from "@/lib/use-pwa-install";
 
 export default function LoginScreen() {
   const [rut, setRut] = useState("");
@@ -24,6 +25,7 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
+  const { canInstall, install } = usePwaInstall();
   const insets = useSafeAreaInsets();
 
   function formatRut(value: string) {
@@ -184,6 +186,19 @@ export default function LoginScreen() {
               <Text style={styles.loginButtonText}>Iniciar Sesión</Text>
             )}
           </Pressable>
+
+          {canInstall && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.installButton,
+                pressed && styles.installButtonPressed,
+              ]}
+              onPress={install}
+            >
+              <Feather name="download" size={18} color={Colors.primary} style={{ marginRight: 8 }} />
+              <Text style={styles.installButtonText}>Instalar app</Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.footer}>
@@ -302,6 +317,25 @@ const styles = StyleSheet.create({
     fontFamily: "Poppins_600SemiBold",
     fontSize: 16,
     color: "#FFFFFF",
+  },
+  installButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    backgroundColor: "rgba(212, 168, 67, 0.08)",
+  },
+  installButtonPressed: {
+    opacity: 0.75,
+    transform: [{ scale: 0.98 }],
+  },
+  installButtonText: {
+    fontFamily: "Poppins_600SemiBold",
+    fontSize: 15,
+    color: Colors.primary,
   },
   footer: {
     alignItems: "center",
